@@ -83,6 +83,8 @@ const char* timezone = "EST5EDT,M3.2.0,M11.1.0";
 
 #define BUTTON_PIN 27
 
+#define EVENT_CHECK_INTERVAL 2000 // milliseconds. how frequently checks for events happening now should occur.
+
 
 #undef DEBUG_CONSOLE
 #define DEBUG_CONSOLE Serial
@@ -120,7 +122,6 @@ AudioFileSourceBuffer *buff;
 
 Button2 button;
 
-
 struct Event {
   struct tm datetime;
   char frequency;
@@ -128,8 +129,8 @@ struct Event {
   String time_as_text;
   uint8_t exclude;
   uint8_t pattern;
-  bool spoken;
-  double last_seen;
+  double last_occurence;
+  bool notification_played;
 };
 
 std::vector<Event> events;
@@ -146,9 +147,9 @@ void visual_notifier(void* parameter);
 
 void status_callback(void *cbData, int code, const char *string);
 void tell(String text);
-void aural_notifier(bool requested);
+void aural_notifier(bool replay);
 
-tm refresh_event(tm datetime, char frequency);
+tm refresh_datetime(tm datetime, char frequency);
 bool load_events_file();
 void check_for_recent_events(uint16_t interval);
 
@@ -250,7 +251,7 @@ void visual_notifier(void* parameter) {
     vTaskDelay(pdMS_TO_TICKS(1)); // allow 1 ms so watchdog is fed. long enough? too long?
     if (events.size()) {
       struct Event event = events[i];
-      if (event.last_seen <= 0) {
+      if (event.last_occurence != 0) {
         if ((millis()-pm1) > 3000) {
           pm1 = millis();
           i = (i+1) % events.size();
@@ -359,18 +360,18 @@ void tell(String text) {
 // not sure if audio can be played on core 0 since wifi runs on that core
 // audio may cause too much of a delay for other tasks
 // tested audio on core 0 but it crashed for an unknown reason
-void aural_notifier(bool requested) {
+void aural_notifier(bool replay) {
   for (auto & event : events) {
-    if (event.last_seen <= 0 && (!event.spoken || requested)) {
+    if (event.last_occurence > 0 && (!event.notification_played || replay)) {
       String text = event.description;
-      if (requested) {
+      if (replay) {
         text = text + event.time_as_text;
       }
       Serial.print("aural_notifier: ");
       Serial.println(text);
       tell(text);
-      event.spoken = true;
-      //espDelay(500); // ??? not sure why, this prevents the an event sound after the first from being played
+      event.notification_played = true;
+      //espDelay(500); // ??? not sure why, this prevents event sounds after the first from being played
       delay(500);
     }
   }
@@ -378,9 +379,9 @@ void aural_notifier(bool requested) {
 
 
 
-tm refresh_event(tm datetime, char frequency) {
-  // refresh_event() will update recurring events, so the next occurrence is in the future.
-  // refresh_events() will also fill in fields for an incompletely specified event even if the event is not in the past.
+tm refresh_datetime(tm datetime, char frequency) {
+  // refresh_datetime() will update recurring events, so the next occurrence is in the future.
+  // refresh_datetime() will also fill in fields for an incompletely specified event even if the event is not in the past.
   //   --improperly set or missing data in tm_wday tm_yday will be corrected. the proper DST info will be filled in when tm_isdst is -1
   struct tm local_now = {0};
   struct tm next_event = {0};
@@ -399,7 +400,7 @@ tm refresh_event(tm datetime, char frequency) {
   //unsetenv("TZ");
   //setenv("TZ", timezone, 1);
   //tzset();
-  if (t2 < tnow) {
+  if (t2 <= tnow) {
     // event is in the past, so we need to update it
     next_event.tm_sec = datetime.tm_sec;
     next_event.tm_min = datetime.tm_min;
@@ -407,12 +408,23 @@ tm refresh_event(tm datetime, char frequency) {
     // tm_wday and tm_yday are not set because mktime() always ignores them.
     next_event.tm_isdst = -1;
 
-    if (frequency == 'd') { // daily
+    if (frequency == 'o') { // once, one-shot
+      // the code that detects if an event is happening now allows a window of time an event can
+      // be close to. this helps prevent missed events, but it can also lead to the event
+      // being detected multiple times over the window.
+      // to prevent multiple detections reoccuring events are moved to their next datetime in the
+      // future. however one-shot events do not have a future. therefore we want to change the
+      // datetime to the far past to move the event a way from the *happening now* detection window.
+      next_event.tm_mday = 0;
+      next_event.tm_mon = 0;
+      next_event.tm_year = 0;
+    }
+    else if (frequency == 'd') { // daily
       next_event.tm_mday = local_now.tm_mday;
       next_event.tm_mon = local_now.tm_mon;
       next_event.tm_year = local_now.tm_year;
       t2 = mktime(&next_event);
-      if (t2 < tnow) {
+      if (t2 <= tnow) {
         next_event.tm_mday += 1;
       }
     }
@@ -421,7 +433,7 @@ tm refresh_event(tm datetime, char frequency) {
       next_event.tm_mon = local_now.tm_mon;
       next_event.tm_year = local_now.tm_year;
       t2 = mktime(&next_event);
-      if (t2 < tnow) {
+      if (t2 <= tnow) {
         next_event.tm_mday += 1;
         next_event.tm_mday += ((datetime.tm_wday - 1 + 7 - local_now.tm_wday) % 7);
       }
@@ -434,7 +446,7 @@ tm refresh_event(tm datetime, char frequency) {
       next_event.tm_mon = local_now.tm_mon;
       next_event.tm_year = local_now.tm_year;
       t2 = mktime(&next_event);
-      if (t2 < tnow) {
+      if (t2 <= tnow) {
         next_event.tm_mon += 1;
       }
       t2 = mktime(&next_event);
@@ -450,7 +462,7 @@ tm refresh_event(tm datetime, char frequency) {
       next_event.tm_mon = datetime.tm_mon;
       next_event.tm_year = local_now.tm_year;
       t2 = mktime(&next_event);
-      if (t2 < tnow) {
+      if (t2 <= tnow) {
         // do while() handles a "yearly" event set on Feb 29. in all other cases the do block will only run once.
         do {
           next_event.tm_year += 1;
@@ -505,23 +517,32 @@ bool load_events_file() {
         const char* fs = jevent[F("f")];
         char frequency = fs[0];
         JsonArray start_date = jevent[F("sd")];
-        JsonArray time = jevent[F("t")];
+        JsonArray event_time = jevent[F("t")];
         JsonVariant pattern = jevent[F("p")];
         // how much validation do we need to do here?
-        if (!start_date.isNull() && start_date.size() == 3 && !time.isNull() && time.size() == 3) {
+        if (!start_date.isNull() && start_date.size() == 3 && !event_time.isNull() && event_time.size() == 3) {
           Serial.println(description);
           struct tm datetime = {0};
           datetime.tm_year = (start_date[0].as<uint16_t>()) - 1900; // entire year is stored in json file to make it more human readable.
           datetime.tm_mon = (start_date[1].as<uint8_t>()) - 1; // time library has January as 0, but json file represents January with 1 to make it more human readable.
           datetime.tm_mday = start_date[2].as<uint8_t>();
-          datetime.tm_hour = time[0].as<uint8_t>();
-          datetime.tm_min = time[1].as<uint8_t>();
-          datetime.tm_sec = time[2].as<uint8_t>();
+          datetime.tm_hour = event_time[0].as<uint8_t>();
+          datetime.tm_min = event_time[1].as<uint8_t>();
+          datetime.tm_sec = event_time[2].as<uint8_t>();
+          datetime.tm_isdst = -1;
+          if (description == "JSON boot test.") { // DEBUG
+            time_t now = 0;
+            time(&now);
+            localtime_r(&now, &datetime);
+            datetime.tm_sec += 16;
+            datetime.tm_isdst = -1;
+            time_t t1 = mktime(&datetime);
+            localtime_r(&t1, &datetime);
+          }
           Serial.println(asctime(&datetime));
-
           char time_as_text[53];
           snprintf(time_as_text, sizeof(time_as_text), " occurred at %i hours, %i minutes, and %i seconds.", datetime.tm_hour, datetime.tm_min, datetime.tm_sec);
-          struct Event event = {refresh_event(datetime, frequency), frequency, description, time_as_text, exclude, pattern, false, 0};
+          struct Event event = {refresh_datetime(datetime, frequency), frequency, description, time_as_text, exclude, pattern, 0, false};
           events.push_back(event);
           Serial.println(asctime(&event.datetime));
         }
@@ -540,9 +561,6 @@ void check_for_recent_events(uint16_t interval) {
     pm = millis();
 
     for (auto & event : events) {
-      event.last_seen = std::numeric_limits<double>::quiet_NaN();
-      Serial.println(event.description);
-
       time_t now = 0;
       struct tm local_now = {0};
       time(&now);
@@ -561,18 +579,35 @@ void check_for_recent_events(uint16_t interval) {
       //setenv("TZ", timezone, 1);
       //tzset();
 
-      time_t t1 = mktime(&local_now);
-      time_t t2 = mktime(&event.datetime);
+      time_t tnow = mktime(&local_now);
+      time_t tevent = mktime(&event.datetime);
 
-      double dt = difftime(t2, t1);
+      double dt = difftime(tevent, tnow);
+      Serial.println(event.description);
       Serial.print("dt: ");
       Serial.println(dt);
-      if (-120 <= dt && dt <= 0) {
-        uint8_t mask = 1 << event.datetime.tm_wday;
-        if ((event.exclude & mask) == 0) {
-          event.last_seen = dt;
-        }
+      // since playing audio is blocking this window needs to be fairly large
+      const double happening_now_cutoff = (-60.0*EVENT_CHECK_INTERVAL)/1000; //120 seconds for 2000 millisecond check interval
+      if (happening_now_cutoff <= dt && dt <= 0) {
+        //bool already_seen_recently = (difftime(event.last_occurence, tnow) > active_cutoff);
+        //if (!already_seen_recently) {
+          uint8_t mask = 1 << event.datetime.tm_wday;
+          if ((event.exclude & mask) == 0) {
+            event.last_occurence = tnow;
+            event.notification_played = false;
+          }
+        //}
+        // refresh_datetime() has the effect of moving the datetime away from the 
+        // happening now detection window which prevents multiple unneccessary detections
+        event.datetime = refresh_datetime(event.datetime, event.frequency);
       }
+      //else if (dt < 0) {
+      //  // even though the datetime has been refreshed to the next occurrence
+      //  // we do not want to update last_occurence.
+      //  // we want to give the user time to see the visual indication that the
+      //  // event occurred and give the user the opportunity to replay the message 
+      //  event.datetime = refresh_datetime(event.datetime, event.frequency);
+      //}
     }
   }
 }
@@ -588,7 +623,7 @@ void single_click_handler(Button2& b) {
 // need a clear notifications function for long press
 void long_press_handler(Button2& b) {
   for (auto & event : events) {
-    event.last_seen = 0;
+    event.last_occurence = 0;
   }
 }
 
@@ -917,44 +952,87 @@ void web_server_initiate(void) {
 }
 
 
-time_t time_provider() {
-  // restore time zone here in case it was changed somewhere else
-  unsetenv("TZ");
-  setenv("TZ", timezone, 1);
-  tzset();
+//time_t time_provider() {
+//  // restore time zone here in case it was changed somewhere else
+//  unsetenv("TZ");
+//  setenv("TZ", timezone, 1);
+//  tzset();
+//
+//  // derived from code found within getLocalTime() and modified to return seconds from epoch with respect to the local time zone
+//  time_t now = 0;
+//  struct tm local_now = {0};
+//  time(&now);
+//  localtime_r(&now, &local_now);
+//  if (local_now.tm_year > (2016 - 1900)) {
+//    // Time.h works with seconds from epoch with the expectation that time zone offsets are already included in that number
+//    // mktime will convert the localtime struct back to time_t, but we have to set the time zone back to GMT, so the
+//    // seconds from epoch it outputs is with respect to our time zone; otherwise it will undo the time zone offset during the conversion.
+//    unsetenv("TZ");
+//    setenv("TZ", "GMT0", 1);
+//    tzset();
+//    time_t t = mktime(&local_now);
+//
+//    unsetenv("TZ");
+//    setenv("TZ", timezone, 1);
+//    tzset();
+//
+//    return t;
+//  }
+//
+//  return 0;
+//}
 
-  // derived from code found within getLocalTime() and modified to return seconds from epoch with respect to the local time zone
-  time_t now = 0;
-  struct tm local_now = {0};
-  time(&now);
-  localtime_r(&now, &local_now);
-  if (local_now.tm_year > (2016 - 1900)) {
-    // Time.h works with seconds from epoch with the expectation that time zone offsets are already included in that number
-    // mktime will convert the localtime struct back to time_t, but we have to set the time zone back to GMT, so the
-    // seconds from epoch it outputs is with respect to our time zone; otherwise it will undo the time zone offset during the conversion.
-    unsetenv("TZ");
-    setenv("TZ", "GMT0", 1);
-    tzset();
-    time_t t = mktime(&local_now);
 
-    unsetenv("TZ");
-    setenv("TZ", timezone, 1);
-    tzset();
+void DBG_create_test_date(tm local_now) {
+  char frequency = 'd';
+  //char frequency = 'w';
+  //char frequency = 'm';
+  //char frequency = 'y';
 
-    return t;
+  struct tm datetime = {0}; // be careful a year of 0 (1900) will actually result in a larger time_t than the present
+  datetime.tm_year = local_now.tm_year-1;
+  datetime.tm_mon = local_now.tm_mon;
+  datetime.tm_mday = local_now.tm_mday;
+  //datetime.tm_wday = local_now.tm_wday;
+  //datetime.tm_yday = local_now.tm_yday;
+  datetime.tm_isdst = -1;
+
+  datetime.tm_hour = local_now.tm_hour;
+  datetime.tm_min = local_now.tm_min;
+  datetime.tm_sec = local_now.tm_sec+10;
+
+  // for testing times near midnight
+  //datetime.tm_hour = 23;
+  //datetime.tm_min = 59;
+  //datetime.tm_sec = 0;
+
+  //datetime.tm_hour = 2;
+  //datetime.tm_min = 59;
+  //datetime.tm_sec = 0;
+
+  if (frequency == 'w') {
+    datetime.tm_wday = 0;
   }
 
-  return 0;
+  String description = "boot test, longer description";
+
+  char time_as_text[53];
+  snprintf(time_as_text, sizeof(time_as_text), " occurred at %i hours, %i minutes, and %i seconds.", datetime.tm_hour, datetime.tm_min, datetime.tm_sec);
+
+  uint8_t exclude = 0;
+  //uint8_t exclude = 32; // Friday
+  //uint8_t exclude = 95; // everyday but Friday
+  uint8_t pattern = 1;
+  struct Event event = {refresh_datetime(datetime, frequency), frequency, description, time_as_text, exclude, pattern, 0, false};
+  events.push_back(event);
+
 }
-
-
 
 void setup() {
   Serial.begin(115200);
 
   preferences.begin("config", false);
   preferences.end();
-  //leds = (CRGB*)malloc(NUM_ROWS*NUM_COLS*sizeof(CRGB));
 
   // setMaxPowerInVoltsAndMilliamps() should not be used if homogenize_brightness_custom() is used
   // since setMaxPowerInVoltsAndMilliamps() uses the builtin LED power usage constants 
@@ -1023,70 +1101,24 @@ void setup() {
   xTaskCreatePinnedToCore(visual_notifier, "Task1", 10000, NULL, 1, &Task1, 0);
 
   load_events_file();
-
-  char frequency = 'd';
-  //char frequency = 'w';
-  //char frequency = 'm';
-  //char frequency = 'y';
-
-  struct tm datetime = {0}; // be careful a year of 0 (1900) will actually result in a larger time_t than the present
-  datetime.tm_year = local_now.tm_year-1;
-  datetime.tm_mon = local_now.tm_mon;
-  datetime.tm_mday = local_now.tm_mday;
-  //datetime.tm_wday = local_now.tm_wday;
-  //datetime.tm_yday = local_now.tm_yday;
-  datetime.tm_isdst = -1;
-
-  datetime.tm_hour = local_now.tm_hour;
-  datetime.tm_min = local_now.tm_min;
-  datetime.tm_sec = local_now.tm_sec+10;
-
-  // for testing times near midnight
-  //datetime.tm_hour = 23;
-  //datetime.tm_min = 59;
-  //datetime.tm_sec = 0;
-
-  //datetime.tm_hour = 2;
-  //datetime.tm_min = 59;
-  //datetime.tm_sec = 0;
-
-  if (frequency == 'w') {
-    datetime.tm_wday = 0;
-  }
-
-  String description = "boot test, longer description";
-
-  char time_as_text[53];
-  snprintf(time_as_text, sizeof(time_as_text), " occurred at %i hours, %i minutes, and %i seconds.", datetime.tm_hour, datetime.tm_min, datetime.tm_sec);
-
-  uint8_t exclude = 0;
-  //uint8_t exclude = 32; // Friday
-  //uint8_t exclude = 95; // everyday but Friday
-  uint8_t pattern = 1;
-  struct Event event = {refresh_event(datetime, frequency), frequency, description, time_as_text, exclude, pattern, false, 0};
-  events.push_back(event);
-
+  //DBG_create_test_date(local_now);
   check_for_recent_events(0);
-  
-  Serial.flush();
-  //while(true) { delay(1000); };
 }
 
 
 void loop() {
 
   button.loop();
-  check_for_recent_events(2000);
-
+  check_for_recent_events(EVENT_CHECK_INTERVAL);
   aural_notifier(false);
 
   // for DEBUGGING
-  static uint32_t pm = 0;
-  static bool reqonce = true;
-  if ((millis()-pm) > (uint32_t)25000) {
-    aural_notifier(reqonce);
-    reqonce = false;
-  }
+  //static uint32_t pm = 0;
+  //static bool reqonce = true;
+  //if ((millis()-pm) > (uint32_t)25000) {
+  //  aural_notifier(reqonce);
+  //  reqonce = false;
+  //}
 }
 
 
