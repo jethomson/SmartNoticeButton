@@ -35,6 +35,8 @@
 //  best way to do this? clear Events vector and reload all events from json file?
 //
 
+// need an option for a one time event
+
 #include <Arduino.h>
 #include <FS.h>
 #include "credentials.h" // set const char *wifi_ssid and const char *wifi_password in include/credentials.h
@@ -498,42 +500,30 @@ bool load_events_file() {
       for (uint8_t i = 0; i < jevents.size(); i++) {
         JsonObject jevent = jevents[i];
         uint8_t exclude = jevent[F("e")].as<uint8_t>();
-        if (true) { // FIXME. WHAT USED TO BE HERE? OR FIX INDENT?
-          String description = jevent[F("d")];
-          // neither of these work: //char frequency = event[F("f")].as<char>(); //char frequency = event[F("f")][0];
-          const char* fs = jevent[F("f")];
-          char frequency = fs[0];
-          JsonArray start_date = jevent[F("sd")];
-          JsonArray time = jevent[F("t")];
-          JsonVariant pattern = jevent[F("p")];
-          // how much validation do we need to do here?
-          if (!start_date.isNull() && start_date.size() == 3 && !time.isNull() && time.size() == 3) {
-            Serial.println(description);
-            struct tm datetime = {0};
-            //uint16_t year = start_date[0].as<uint16_t>();
-            //datetime.tm_year = year-1900;
-            datetime.tm_year = (start_date[0].as<uint16_t>()) - 1900; // entire year is stored in json file to make it more human readable.
-            datetime.tm_mon = (start_date[1].as<uint8_t>()) - 1; // time library has January as 0, but json file represents January with 1 to make it more human readable.
-            datetime.tm_mday = start_date[2].as<uint8_t>();
-            datetime.tm_hour = time[0].as<uint8_t>();
-            datetime.tm_min = time[1].as<uint8_t>();
-            datetime.tm_sec = time[2].as<uint8_t>();
-            // need an option for a one time event
-            Serial.println(asctime(&datetime));
+        String description = jevent[F("d")];
+        // neither of these work: //char frequency = event[F("f")].as<char>(); //char frequency = event[F("f")][0];
+        const char* fs = jevent[F("f")];
+        char frequency = fs[0];
+        JsonArray start_date = jevent[F("sd")];
+        JsonArray time = jevent[F("t")];
+        JsonVariant pattern = jevent[F("p")];
+        // how much validation do we need to do here?
+        if (!start_date.isNull() && start_date.size() == 3 && !time.isNull() && time.size() == 3) {
+          Serial.println(description);
+          struct tm datetime = {0};
+          datetime.tm_year = (start_date[0].as<uint16_t>()) - 1900; // entire year is stored in json file to make it more human readable.
+          datetime.tm_mon = (start_date[1].as<uint8_t>()) - 1; // time library has January as 0, but json file represents January with 1 to make it more human readable.
+          datetime.tm_mday = start_date[2].as<uint8_t>();
+          datetime.tm_hour = time[0].as<uint8_t>();
+          datetime.tm_min = time[1].as<uint8_t>();
+          datetime.tm_sec = time[2].as<uint8_t>();
+          Serial.println(asctime(&datetime));
 
-            // should use sprintf instead
-            // better to have the frontend form this text for us ???
-            String time_as_text = " occurred at " ;
-            time_as_text += String(datetime.tm_hour);
-            time_as_text += " hours, ";
-            time_as_text += String(datetime.tm_min);
-            time_as_text += " minutes, ";
-            time_as_text += String(datetime.tm_sec);
-            time_as_text += " seconds.";
-            struct Event event = {refresh_event(datetime, frequency), frequency, description, time_as_text, exclude, pattern, false, 0};
-            events.push_back(event);
-            Serial.println(asctime(&event.datetime));
-          }
+          char time_as_text[53];
+          snprintf(time_as_text, sizeof(time_as_text), " occurred at %i hours, %i minutes, and %i seconds.", datetime.tm_hour, datetime.tm_min, datetime.tm_sec);
+          struct Event event = {refresh_event(datetime, frequency), frequency, description, time_as_text, exclude, pattern, false, 0};
+          events.push_back(event);
+          Serial.println(asctime(&event.datetime));
         }
       }
     }
@@ -1064,15 +1054,11 @@ void setup() {
     datetime.tm_wday = 0;
   }
 
-
   String description = "boot test, longer description";
-  String time_as_text = " occurred at " ;
-  time_as_text += String(datetime.tm_hour);
-  time_as_text += " hours, ";
-  time_as_text += String(datetime.tm_min);
-  time_as_text += " minutes, ";
-  time_as_text += String(datetime.tm_sec);
-  time_as_text += " seconds.";
+
+  char time_as_text[53];
+  snprintf(time_as_text, sizeof(time_as_text), " occurred at %i hours, %i minutes, and %i seconds.", datetime.tm_hour, datetime.tm_min, datetime.tm_sec);
+
   uint8_t exclude = 0;
   //uint8_t exclude = 32; // Friday
   //uint8_t exclude = 95; // everyday but Friday
