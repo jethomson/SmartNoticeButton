@@ -4,6 +4,7 @@
 .vscode/launch.json
 .vscode/ipch
 .vscode/extensions.json
+notes.txt
 include/credentials_private.h
 src/*.NOTUSED
 lib/*.zip
