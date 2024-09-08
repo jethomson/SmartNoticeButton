@@ -472,6 +472,18 @@ tm refresh_datetime(tm datetime, char frequency) {
         while (next_event.tm_mday != datetime.tm_mday && next_event.tm_mon != datetime.tm_mon);
       }
     }
+    else if (frequency == 't') { // DEBUG, testing refreshing without having to edit json file or wait a day
+      next_event.tm_sec = local_now.tm_sec+90;
+      next_event.tm_min = local_now.tm_min;
+      next_event.tm_hour = local_now.tm_hour;
+      next_event.tm_mday = local_now.tm_mday;
+      next_event.tm_mon = local_now.tm_mon;
+      next_event.tm_year = local_now.tm_year;
+      t2 = mktime(&next_event);
+      if (t2 <= tnow) {
+        next_event.tm_mday += 1;
+      }
+    }
   }
   t2 = mktime(&next_event);
   localtime_r(&t2, &next_event); // tm_wday, tm_yday, and tm_isdst are filled in with the proper values
