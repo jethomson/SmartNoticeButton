@@ -7,5 +7,6 @@
 #else
 const char* wifi_ssid = "YOUR_WIFI_SSID";
 const char* wifi_password = "YOUR_WIFI_PASSWORD";
+const char* tts_api_key = "YOUR_VOICE_RSS_TTS_API_KEY";
 #endif
 

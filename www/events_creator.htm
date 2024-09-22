@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+  <meta http-equiv="Cache-Control" content="private, no-store" />
+  <title>Notification Events</title>
+  <style>
+  html {
+    touch-action: manipulation;
+    overflow: auto;
+  }
+
+  body {
+    font-family: Arial, sans-serif;
+    color: #faffff;
+    background: #111;
+    font-size: 17px;
+    text-align: center;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #return_main_menu {
+    float: left;
+  }
+  
+  #main_div {
+    /*max-width: 1400px;*/
+    margin: auto;
+  }
+
+  .grid-container {
+    display: grid;
+    grid-template-columns: repeat(11, minmax(20px, 340px)); /*fixes select element overflow grid width problem in chrome*/
+    grid-column-gap: 1vw;
+    grid-auto-rows: 30px;
+    grid-row-gap: 5px;
+    /*width: 1000px;*/
+    max-width: 95vw;
+    justify-content: center;
+    margin: 5px auto;
+    padding: 5px;
+    border-style: solid;
+  }
+
+  .item-a {
+    grid-column-start: 1;
+  }
+
+  /* this allows children element of section to be displayed as if they were direct children of the div grid */
+  section {
+    display: contents;
+  }
+
+  #button_container {
+    display: flex;
+    padding-bottom: 10px;
+    padding-top: 10px;
+    max-width: 600px;
+    margin: 5px auto;
+  }
+  .buttonclass {
+    flex:1;
+    padding-top:5px;
+    padding-bottom:5px;
+  }
+
+  input#fileid{
+    flex-grow: 1;
+    padding-top: 5px;
+    padding-bottom: 5px;
+    background: #222;
+    border: 1px solid #333;
+    padding-inline: 5px;
+    max-width: 225px;
+    border-radius: 7px;
+    font-family: Arial,sans-serif;
+    font-size: 15px;
+    color: #ddd;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .gap {
+    width:10px;
+  }
+
+  button {
+    background: #222;
+    border: 1px solid #333;
+    padding-inline: 5px;
+    width: 100%;
+    border-radius: 24px;
+    font-family: Arial, sans-serif;
+    font-size: 1em;
+    color: #ddd;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor:pointer;
+  }
+  /*
+  button:hover,
+  input[type="button"]:hover {
+    background: #0e70a4;
+  }
+  */
+
+  .buttonclass {
+    flex: 1;
+    padding-top: 5px;
+    padding-bottom: 5px;
+  }
+
+  .svg-icon {
+    vertical-align: middle;
+  }
+
+  .header {
+    text-align: center;
+  }
+
+  input[type="color"] {
+    margin: auto;
+  }
+
+  </style>
+</head>
+<body>
+  <a id="return_main_menu" href="./index.htm"><svg height="24px" width="24px" viewBox="0 0 16 16" id="Layer_1" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><path fill="white" d="M15.45,7L14,5.551V2c0-0.55-0.45-1-1-1h-1c-0.55,0-1,0.45-1,1v0.553L9,0.555C8.727,0.297,8.477,0,8,0S7.273,0.297,7,0.555  L0.55,7C0.238,7.325,0,7.562,0,8c0,0.563,0.432,1,1,1h1v6c0,0.55,0.45,1,1,1h3v-5c0-0.55,0.45-1,1-1h2c0.55,0,1,0.45,1,1v5h3  c0.55,0,1-0.45,1-1V9h1c0.568,0,1-0.437,1-1C16,7.562,15.762,7.325,15.45,7z"/></svg></a>
+  <h3>Create Notifications</h3>
+
+  <div id="main_div">
+    <div id="button_container">
+      <!--input type="text" id="fileid" maxlength=26 placeholder="Enter filename here." value="" autocomplete="off" /-->
+      <div id="gap1" class="gap"></div>
+      <button id="btn_save" class="buttonclass" onclick="save()"><svg class="svg-icon" style="width:36px;height:36px" viewBox="0 0 24 24"> <path id="sendSvgP" fill="currentColor" d="M6.5 20Q4.22 20 2.61 18.43 1 16.85 1 14.58 1 12.63 2.17 11.1 3.35 9.57 5.25 9.15 5.88 6.85 7.75 5.43 9.63 4 12 4 14.93 4 16.96 6.04 19 8.07 19 11 20.73 11.2 21.86 12.5 23 13.78 23 15.5 23 17.38 21.69 18.69 20.38 20 18.5 20H13Q12.18 20 11.59 19.41 11 18.83 11 18V12.85L9.4 14.4L8 13L12 9L16 13L14.6 14.4L13 12.85V18H18.5Q19.55 18 20.27 17.27 21 16.55 21 15.5 21 14.45 20.27 13.73 19.55 13 18.5 13H17V11Q17 8.93 15.54 7.46 14.08 6 12 6 9.93 6 8.46 7.46 7 8.93 7 11H6.5Q5.05 11 4.03 12.03 3 13.05 3 14.5 3 15.95 4.03 17 5.05 18 6.5 18H9V20M12 13Z"></path> </svg>&nbsp; Save</button>
+    </div>
+    <div id="events_container" class="grid-container">
+        <section id="title_row">
+            <label class="item-a">Add/Remove</label>
+            <label>Move</label>
+            <label>Description</label>
+            <label>Frequency</label>
+            <label>Start Date</label>
+            <label>End Date</label>
+            <label>Time</label>
+            <label>Exclude</label>
+            <label>Visual Pattern</label>
+            <label>Color Chooser</label>
+            <label>Audio</label>
+        </section>
+    </div>
+  </div>
+
+<script>
+base_url = "";
+if (window.location.protocol == "file:") {
+  // makes for easier debugging.
+  // if html is loaded locally, can see the results of editing more easily.
+  // otherwise every change to html would require uploading new version to microcontroller.
+  base_url = "http://smartbutton.local";
+}
+
+
+function enable_disable_color_input(dradio, id) {
+  let el = document.getElementById(id);
+  if (el) {
+    if (dradio.checked && dradio.value == 2) {
+      //el.style.display = "none";
+      el.disabled = false;
+    }
+    else {
+      //el.style.display = "";
+      el.disabled = true;
+    }
+  }
+}
+
+
+function enable_disable_settings(el_select) {
+  let opt = el_select.options[el_select.selectedIndex];
+  let type = "e"; // need to set to e in order to disable all settings when empty layer is chosen.
+  if (opt.parentElement.tagName === "OPTGROUP") {
+    type = opt.parentElement.id;
+  }
+
+  let id = el_select.id;
+  let els = document.querySelectorAll(`[id^="${id}"][data-setting-for]`);
+  for (el of els) {
+    //let dnew = "none";
+    let dnew = true;
+    let enabled_for_types = el.getAttribute("data-setting-for").split(",");
+    if (enabled_for_types.includes(type)) {
+      //dnew = "";
+      dnew = false;
+      // since the radio buttons enable/disable color picker its state should remain unchanged here
+      if (el.getAttribute("data-key") === "c") {
+        dnew = el.disabled;
+      }
+    }
+    else {
+      // set to defaults - maybe should create a function for this that can be called on page load
+      if (el.getAttribute("data-key") == "a") {
+        el.selectedIndex = 0;
+        el.disabled = false;
+      }
+
+      if (el.getAttribute("data-key") == "ct") {
+        el.checked = (el.value == 0) ? true : false;
+      }
+      if (el.type == "color") {
+        el.value = "#3584e4";
+      }
+      el.selected = false;
+      if (el.type == "text") {
+        el.value = "";
+      }
+    }
+    //el.style.display = dnew;
+    el.disabled = dnew;
+  }
+}
+
+
+/*
+function upload_status(json) {
+  if (json["upload_status"] == 0) {
+    //console.log("File uploaded successfully.");
+    document.getElementById("btn_save").textContent = "Update Successful!";
+  }
+  else {
+    //console.log("File upload failed.");
+    document.getElementById("btn_save").textContent = "Update Failed :(";
+  }
+}
+*/
+
+
+async function save() {
+  let events_dict = {};
+
+  events_dict["events"] = [];
+
+  let events = document.querySelectorAll("section[data-event]");
+  for (let i = 0; i < events.length; i++) {
+    let event = events[i];
+    let el_keys = event.querySelectorAll("[data-key]");
+    let eobj = {};
+    let save_color = false;
+    for (let j = 0; j < el_keys.length; j++) {
+      let el_key = el_keys[j];
+
+      let key = el_key.getAttribute("data-key");
+      let value;
+      // description
+      if (key === "d") {
+        //value = encodeURIComponent(el_key.value); // text can have special characters, so need to encode them.
+        value = el_key.value;
+      }
+
+      // frequency
+      if (key === "f") {
+        let opt = el_key.options[el_key.selectedIndex];
+        value = opt.value;
+      }
+
+      // start date OR end date
+      if (key === "sd" || key === "ed") {
+        //value = el_key.value.split("-").map((s) => {return "!!" + parseInt(s, 10) + "!!"});
+        value = el_key.value.split("-").map((s) => {return parseInt(s, 10)});
+      }
+
+      // time
+      if (key === "t") {
+        //value = el_key.value.split(":").map((s) => {return "!!" + parseInt(s, 10) + "!!"});
+        value = el_key.value.split(":").map((s) => {return parseInt(s, 10)});
+      }
+
+      // exclude 
+      if (key === "e") {
+        value = 0;
+        let options = el_key.selectedOptions;
+        for (let k = 0; k < options.length; k++) {
+          let opt = options[k];
+          value += (1 << opt.value);
+        }
+        //value = "!!" + value + "!!";
+      }
+
+      // pattern
+      if (key === "p") {
+        let opt = el_key.options[el_key.selectedIndex];
+        value = opt.value;
+      }
+
+      // audio
+      if (key === "a") {
+        let opt = el_key.options[el_key.selectedIndex];
+        value = opt.value;
+      }
+
+      //stringify() wraps numbers in quotes so wrap numbers in !! to make it easy to remove the quotes.
+      //any number that you want to represented as a number in json should have the value set above here. 
+      if (value && !isNaN(value)) {
+        value = "!!"+value+"!!";
+      }
+
+      if (key === "c") {
+        value = "0x00000000";
+        let opt = el_key.options[el_key.selectedIndex];
+        if (opt) {
+          value = opt.value;
+        }
+      }
+
+      if (value || value === "") { // value === "" allows for blank descriptions. TODO: bad idea? let's other blank things through causing bugs?
+        eobj[key] = value;
+      }
+    }
+    events_dict["events"].push(eobj);
+  }
+  let json = JSON.stringify(events_dict);
+  const regex = /"!!(-?[0-9]+\.{0,1}[0-9]*)!!"/g 
+  json = json.replace(regex, '$1')
+  console.log(json);
+  json = encodeURIComponent(json);
+
+  //console.log(`id=events.json&json=` + json);
+/*
+  let success = false;
+  try {
+    const t = await fetch(base_url+"/save", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: "id=/files/events.json&json=" + json
+    });
+    reply = await t.json();
+    console.log(reply);
+    success = true;
+  }
+  catch(e) {
+    console.error(e);
+    success = false;
+  }
+
+  let sb = document.getElementById("sendSvgP");
+  if (success) {
+    sb.setAttribute("fill", "#056b0a");
+    setTimeout(function(){sb.setAttribute("fill", "#eee")}, 1000);
+  }
+  else {
+    sb.setAttribute("fill", "#6b050c");
+    setTimeout(function(){sb.setAttribute("fill", "#777")}, 1000);
+  }
+*/
+}
+
+async function create_audio_options() {
+  let audio_options_html = `
+  <optgroup id="s" label="Sounds">
+    <option value="chime.mp3">Chime</option>
+  </optgroup>`;
+
+  await fetch(base_url+"/voicerss.json").then((response) => {
+    if (response.ok) {
+      return response.json();
+    }
+    throw new Error('Something went wrong');
+  })
+  .then((json) => {
+    let optgroups = json["og"];
+    if (optgroups) {
+        audio_options_html += `
+  <optgroup id="v" label="Voices">`;
+      for (let i = 0; i < optgroups.length; i++) {
+        let optgroup = optgroups[i];
+        audio_options_html += `
+    <optgroup label="&nbsp;&nbsp;${optgroup['l']}">`;
+        let options = optgroup['o'];
+        for (let j = 0; j < options.length; j++) {
+          let option = options[j];
+          audio_options_html += `
+      <option value="${option['v']}">&nbsp;&nbsp;${option['t']}</option>`;
+        }
+        audio_options_html += `
+    </optgroup>`;
+      }
+        audio_options_html += `
+  </optgroup>`;
+    }
+  })
+  .catch((error) => {
+    console.log(error)
+  });
+
+  return audio_options_html;
+}
+
+
+function handle_move(num_id, direction) {
+  let section = document.getElementById(`e${num_id}`);
+  let new_section = document.createDocumentFragment();
+  new_section.appendChild(section.cloneNode(true));
+  let events_container = document.getElementById("events_container");
+  if (direction === "up") {
+    if (section.previousElementSibling.id != "title_row") {
+      events_container.insertBefore(new_section, section.previousElementSibling);
+      section.remove();
+    }
+  }
+  else if (direction === "down") {
+    console.log("down");
+    if (section.nextElementSibling.id != "btn_add_event") {
+      events_container.insertBefore(new_section, section.nextElementSibling.nextElementSibling);
+      section.remove();
+    }
+  }
+}
+
+
+function handle_exclude_select(el_changed, event) {
+  //console.log(event.type);
+  if (event.type == "mouseenter") {
+    // add a little delay to prevent showing options if mouse cursor was just passing over and not hovering over element
+    el_changed.timeout_id = setTimeout(function(){el_changed.style.height = "155px"; el_changed.style.overflow = "show"; el_changed.style.zIndex = "1";}, 200);
+  }
+
+  if (event.type == "mouseleave") {
+    clearTimeout(el_changed.timeout_id);
+    let el_selects = document.querySelectorAll('select[data-key="e"]');
+    for (let i = 0; i < el_selects.length; i++) {
+      let el_select = el_selects[i];
+      el_select.style.height = "100%";
+      el_select.style.overflow = "scroll";
+      el_select.style.zIndex = "auto";
+    }
+  }
+
+  if (event.type == "change") {
+    let options = el_changed.options;
+    for (let i = 0; i < options.length; i++) {
+      let option = options[i];
+      option.innerHTML = option.innerHTML.replace("☑", "☐");
+      if (option.selected) {
+        option.innerHTML = option.innerHTML.replace("☐", "☑");
+      }
+    }
+  }
+}
+
+
+function handle_color_picker(el_changed, event) {
+  console.log(event.type);
+  if (event.type == "input") {
+    let i = parseInt(el_changed.id.replace("e", "").replace("cp", ""));
+    let color_select = document.getElementById(`e${i}c`);
+    let custom_option = color_select.options[0];
+    let color = el_changed.value.replace("#", "").toUpperCase();
+    custom_option.innerHTML = `Custom (${el_changed.value})`
+    custom_option.value = `0x00${color}`
+    custom_option.selected = true;
+    color_select.dispatchEvent(new Event('change'));
+  }
+}
+
+
+function handle_color_select(el_changed, event) {
+  console.log(event.type);
+  if (event.type == "change") {
+    let i = parseInt(el_changed.id.replace("e", "").replace("c", ""));
+    let color = `#${el_changed.value.slice(4)}`;
+    console.log(el_changed.value);
+    console.log(color);
+    let color_picker = document.getElementById(`e${i}cp`);
+    color_picker.value = color;
+    let overlay_color = document.getElementById(`e${i}ol`);
+    //console.log(el_changed.selectedOptions[0].innerHTML);
+    if (el_changed.selectedOptions[0].innerHTML === "Rainbow") {
+      //overlay_color.style.background = "linear-gradient(90deg, red 0%, orange 14.29%, yellow 28.57%, green 42.86%, aqua 57.14%, blue 71.43%, purple 85.71%, pink 100%)";
+      overlay_color.style.backgroundImage = "linear-gradient(90deg, red, orange, yellow, green, aqua, blue, purple, pink)";
+    }
+    else if (el_changed.selectedOptions[0].innerHTML === "Red/Green") {
+      overlay_color.style.backgroundImage = "linear-gradient(90deg, red, green)";
+    }
+    else if (el_changed.selectedOptions[0].innerHTML === "Orange/Blue") {
+      overlay_color.style.backgroundImage = "linear-gradient(90deg, orange, blue)";
+    }
+    else {
+      overlay_color.style.background = "none";
+    }
+  }
+}
+
+
+let event_html_template = "";
+async function create_event_html_template() {
+  let exclude_options_html = "";
+  let days = ["☐ Sunday", "☐ Monday", "☐ Tuesday", "☐ Wednesday", "☐ Thursday", "☐ Friday", "☐ Saturday"];
+  for (let j = 0; j < days.length; j++) {
+    exclude_options_html += `      <option value="${j}">${days[j]}</option>\r\n`
+  }
+
+  let color_options_html = "";
+  //let colors = ["Custom (0x00------)", "Red (0x00FF0000)", "Yellow (0x00FFFF00)", "Orange (0x00FFA500)", "Green (0x0000FF00)", "Aqua (0x0000FFFF)", "Blue (0x000000FF)", "Purple (0x00800080)", "Pink (0x00FFC0CB)", "White (0x00FFFFFF)", "Black/Off (0x00000000)", "Rainbow (0xFFFFFFFF)"];
+  let color_names = ["Custom", "Red", "Yellow", "Orange", "Green", "Aqua", "Blue", "Purple", "Pink", "White", "Black/Off", "Rainbow", "Red/Green", "Orange/Blue"];
+  let color_values = ["0x00FFFFFF", "0x00FF0000", "0x00FFFF00", "0x00FFA500", "0x0000FF00", "0x0000FFFF", "0x000000FF", "0x00800080", "0x00FFC0CB", "0x00FFFFFF", "0x00000000", "0x01000000", "0x01000001", "0x01000002"];
+  //let colors = ["Red (0x00FF"];
+  color_options_html += `      <optgroup label="From Color Picker"><option value="${color_values[0]}">${color_names[0]} (${color_values[0].replace('0x00', '#')})</option></optgroup>\r\n`
+  color_options_html += `      <optgroup label="Predefined">\r\n`
+  for (let j = 1; j < color_names.length; j++) {
+    color_options_html += `      <option value="${color_values[j]}">${color_names[j]}</option>\r\n`
+  }
+  color_options_html += `      </optgroup>\r\n`
+
+  let audio_options_html = await create_audio_options();
+  //let audio_options_html = `<optgroup id="s" label="Sounds"><option value="chime.mp3">Chime</option></optgroup>`;
+
+  event_html_template = `
+<section id="e!!EVENT_NUM!!" data-event="e!!EVENT_NUM!!">
+    <input type="button" value="-" onclick="function(){document.getElementById("e!!EVENT_NUM!!").remove()}" />
+
+    <div>
+      <input type="button" value="↑" onclick="handle_move(!!EVENT_NUM!!, 'up')" />
+      <input type="button" value="↓" onclick="handle_move(!!EVENT_NUM!!, 'down')" />
+    </div>
+
+    <input id="e!!EVENT_NUM!!d" type="text" data-key="d" value="" autocomplete="off" />
+    <select id="e!!EVENT_NUM!!f" data-key="f" autocomplete="off">
+      <option value="o">Once</option>
+      <!--option value="h">Hourly</option-->
+      <option value="d">Daily</option>
+      <option value="w">Weekly</option>
+      <option value="m">Monthly</option>
+      <option value="y">Yearly</option>
+      <option value="t">Test</option>
+      <!--option value="s">Start of Month</option-->
+      <!--option value="e">End of Month</option-->
+    </select>
+    <input id="e!!EVENT_NUM!!sd" type="date" data-key="sd" value="" min="" max="" />
+    <input id="e!!EVENT_NUM!!ed" type="date" data-key="ed" value="" min="" max="" />
+    <input id="e!!EVENT_NUM!!t" type="time" data-key="t" value="" min="" max="" />
+    <select id="e!!EVENT_NUM!!e" data-key="e" autocomplete="off" multiple size="7" onmouseenter="handle_exclude_select(this, event)" onmouseleave="handle_exclude_select(this, event)" onchange="handle_exclude_select(this, event)">;
+${exclude_options_html}
+    </select>
+    <select id="e!!EVENT_NUM!!p" data-key="p" autocomplete="off">
+      <option value="0">Breathe</option>
+      <option value="1">Blink</option>
+      <option value="2">Spin</option>
+    </select>
+    <!--keep as example of data-setting-for -->
+    <!--input id="e!!EVENT_NUM!!rdc" type="radio" name="e!!EVENT_NUM!!cc" data-setting-for="im,p,t,n" data-key="ct" value="0" autocomplete="off" onchange="enable_disable_color_input(this, 'e!!EVENT_NUM!!c')" disabled checked /-->
+    <div style="display:flex">
+      <div style="position:relative">
+        <input id="e!!EVENT_NUM!!cp" type="color" autocomplete="off" value="#FFFFFF" oninput="handle_color_picker(this, event)" />
+        <div id="e!!EVENT_NUM!!ol" style="position: absolute; top: 0; left: 0; margin: 0; border: none; width: 100%; height: 100%; pointer-events: none"></div>
+      </div>
+      <select id="e!!EVENT_NUM!!c" data-key="c" autocomplete="off" onchange="handle_color_select(this, event)">
+${color_options_html}
+      </select>
+    </div>
+    <select id="e!!EVENT_NUM!!a" data-key="a" autocomplete="off">
+${audio_options_html}
+    </select>
+</section>`;
+}
+
+
+async function add_default_event(fetch_time) {
+  add_default_event.event_num = add_default_event.event_num || 0; 
+  let events_container = document.getElementById("events_container");
+  let event_html = event_html_template.replaceAll("!!EVENT_NUM!!", add_default_event.event_num); 
+  //events_container.insertAdjacentHTML("beforeend", event_html);
+  let add_event_button = document.getElementById("btn_add_event");
+  //events_container.insertBefore(event_html, add_event_button);
+  add_event_button.insertAdjacentHTML("beforebegin", event_html);
+
+  // set defaults
+
+  if (fetch_time) {
+    //privacy.resistFingerprinting prevents this from working correctly
+    //const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    //console.log(timezone);
+
+    let response = await fetch("http://worldtimeapi.org/api/ip"); // returns local time based on location of IP address
+    let datetime_json = await response.json();
+    //console.log(datetime_json);
+    console.log(datetime_json["datetime"]);
+    let datetime_local = datetime_json["datetime"];
+    datetime_local = datetime_local.split(".")[0]; // in order to get local hours split at decimal to discard timezone
+    let now = new Date(datetime_local);
+    console.log(now.getHours());
+    console.log(now.toLocaleString());
+    let sd = new Date();
+    sd.setTime(now.getTime()+3600000); // add one hour in milliseconds
+    console.log(sd.toLocaleString());
+    //https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/setTime
+
+    document.getElementById(`e${add_default_event.event_num}sd`).value = sd.toISOString().split("T")[0];
+    document.getElementById(`e${add_default_event.event_num}ed`).value = "1900-01-01";
+    //console.log(sd.toISOString().split("T")[1].split(".")[0]);
+    //document.getElementById(`e${add_default_event.event_num}t`).value = sd.toISOString().split("T")[1].split(".")[0];
+    document.getElementById(`e${add_default_event.event_num}t`).value = String(sd.getHours()).padStart("2", "0") + ":00:00";
+  }
+
+  add_default_event.event_num++; 
+}
+
+
+async function load_events() {
+  //const t = await fetch(base_url+"/files/events.json");
+  //let events_json = await t.json();
+  //let events_json = JSON.parse('{"events":[{"d":"JSON boot test.","f":"d","sd":[1900,1,1],"ed":[1900,1,1],"t":[0,0,0],"e":65,"p":0,"c":"0x00FF0000","a":"en-ca&v=Clara"},{"d":"Refresh test.","f":"t","sd":[2024,1,1],"ed":[1900,1,1],"t":[0,0,0],"e":0,"p":1,"c":"0x0000FF00","a":"en-ca&v=Clara"},{"d":"This is a test notification. It is a bit long.","f":"d","e":0,"sd":[2024,9,16],"ed":[1900,1,1],"t":[17,33,59],"p":1,"c":"0x000000FF","a":"en-ca&v=Clara"}]}');
+  let events_json = JSON.parse('{"events":[{"d":"JSON boot test.","f":"d","sd":[1900,1,1],"ed":[1900,1,1],"t":[0,0,0],"e":65,"p":0,"c":"0x01000000","a":"chime.mp3"},{"d":"Refresh test.","f":"t","sd":[2024,1,1],"ed":[1900,1,1],"t":[0,0,0],"p":1,"c":"0x01000001","a":"chime.mp3"},{"d":"This is a test notification. It is a bit long.","f":"d","sd":[2024,9,16],"ed":[1900,1,1],"t":[23,13,59],"p":2,"c":"0x01000002","a":"chime.mp3"}]}');
+
+  let events = events_json["events"];
+  if (events) {
+    for (let i = 0; i < events.length; i++) {
+      add_default_event(false);
+
+      // customize events using data from events.json
+
+      document.getElementById(`e${i}d`).value = events[i]["d"];
+      document.getElementById(`e${i}f`).value = events[i]["f"];
+
+      let start_date = String(events[i]["sd"][0]) + "-" + String(events[i]["sd"][1]).padStart("2", "0") + "-" + String(events[i]["sd"][2]).padStart("2", "0");
+      document.getElementById(`e${i}sd`).value = start_date;
+      let end_date = String(events[i]["ed"][0]) + "-" + String(events[i]["ed"][1]).padStart("2", "0") + "-" + String(events[i]["ed"][2]).padStart("2", "0");
+      document.getElementById(`e${i}ed`).value = end_date;
+      let time = String(events[i]["t"][0]).padStart("2", "0") + ":" + String(events[i]["t"][1]).padStart("2", "0") + ":" + String(events[i]["t"][2]).padStart("2", "0");
+      document.getElementById(`e${i}t`).value = time;
+
+      let exclude_select = document.getElementById(`e${i}e`);
+      let exclude = parseInt(events[i]["e"]);
+      for (let j = 0; exclude > 0 && j < exclude_select.options.length; j++) {
+        let option = exclude_select.options[j];
+        option.innerHTML = option.innerHTML.replace("☑", "☐");
+        let selected = "";
+        let mask = 1 << j;
+        if ((exclude & mask) > 0) {
+          //console.log(`exclude: ${exclude}`);
+          //console.log(`j: ${j}`);
+          option.selected = true;
+          option.innerHTML = option.innerHTML.replace("☐","☑");
+        }
+      }
+
+      // really need to query the server for a list of options instead of hard coding the patterns in the frontend
+      document.getElementById(`e${i}p`).options[parseInt(events[i]["p"])].selected = true;
+
+      let color_select = document.getElementById(`e${i}c`);
+      for (let j = 0; j < color_select.options.length; j++) {
+        let option = color_select.options[j];
+        if (option.value == events[i]["c"]) {
+          option.selected = true;
+          //color_select.options.selectedIndex = j;
+          color_select.dispatchEvent(new Event('change'));
+        }
+      }
+
+      // add option to enter full URL
+      // show file list so user can upload one mp3 notification sounds
+      let audio_select = document.getElementById(`e${i}a`);
+      for (let j = 0; j < audio_select.options.length; j++) {
+        let option = audio_select.options[j];
+        if (option.value.indexOf(events[i]["a"]) != -1) {
+          option.selected = true;
+        }
+      }
+    }
+  }
+}
+
+async function get_timezone() {
+  try {
+    const response = await fetch(base_url+"/get_timezone");
+    const timezone = await response.json();
+    let is_default_tz = timezone["is_default_tz"];
+    if (is_default_tz) {
+      let button_container = document.getElementById('button_container');
+      let warning = document.createTextNode("Warning: timezone is not set. All times are in UTC. Please visit configuration page to set timezone.");
+      let main_div = document.getElementById("main_div");
+      main_div.insertBefore(warning, button_container);
+    }
+  }
+  catch(e) {
+    console.error(e);
+  }
+}
+
+async function run() {
+  //let response = await fetch("http://worldtimeapi.org/api/ip");
+  //let json = await response.json();
+  //console.log(json);
+  //console.log(json["datetime"]);
+  //let now = new Date(json["datetime"]);
+  //console.log(now.getHours());
+  //console.log(now.toLocaleTimeString());
+
+  await get_timezone();
+  await create_event_html_template();
+  let events_container = document.getElementById("events_container");
+  let add_event_button = `<input id="btn_add_event" type="button" value="+" onclick=add_default_event(true) />`;
+  events_container.insertAdjacentHTML("beforeend", add_event_button);
+  load_events();
+}
+
+// trigger onchange for dynamic color radio so previous or default selection takes effect
+let els = document.querySelectorAll('input[type="radio"][data-key="ct"]');
+for (el of els) {
+  el.dispatchEvent(new Event("change"));
+}
+
+window.addEventListener("load", run);
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+  <meta http-equiv="Cache-Control" content="private, no-store" />
+  <title>Smart Notifier Button</title>
+  <style>
+  html {
+    touch-action: manipulation
+    overflow: auto;
+  }
+
+  body {
+    font-family: Arial, sans-serif;
+    color: #faffff;
+    background: #111;
+    font-size: 17px;
+    text-align: center;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  .button-container {
+    display:inline-block;
+    min-width:340px;
+  }
+
+  div {
+    padding: 5px;
+    font-size: 1em;
+  }
+  
+  p {
+    margin: 0.5em 0;
+  }
+
+  button {
+    border: 0;
+    border-radius: 0.3rem;
+    color: #faffff;
+    background: #1fa3ec;
+    line-height: 2.4rem;
+    font-size: 1.2rem;
+    width: 100%;
+    -webkit-transition-duration: 0.4s;
+    transition-duration: 0.4s;
+    cursor: pointer;
+    margin: 5px 0px;
+  }
+  button:hover {
+    background: #0e70a4;
+  }
+  
+  .bred {
+    background: #d43535;
+  }
+
+  .bred:hover {
+    background: #931f1f;
+  }
+  </style>
+</head>
+
+<body>
+  <details>
+    <summary>Instructions</summary>
+    <b>Lorem ipsum</b>
+    <br>
+    <b>Filler text</b>
+  </details>
+  <div class="button-container">
+    <div class="grid-item-button">
+      <a href="./events_creator.htm"><button>Create Events</button></a>
+    </div>
+    <div class="grid-item-button">
+      <a href="./file_manager.htm"><button>Manage Files</button></a>
+    </div>
+    <div class="grid-item-button">
+      <a href="./config.htm"><button>Configuration</button></a>
+    </div>
+    <div class="grid-item-button">
+      <a href="./restart.htm"><button class="bred">Restart</button></a>
+    </div>
+  </div>
+</body>
+</html>

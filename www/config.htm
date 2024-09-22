@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+  <meta http-equiv="Cache-Control" content="private, no-store" />
+  <title>Configuration</title>
+  <style>
+  html {
+    touch-action: manipulation;
+    overflow: auto;
+  }
+
+  body {
+    font-family: Arial, sans-serif;
+    color: #faffff;
+    background: #111;
+    font-size: 17px;
+    text-align: center;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #return_main_menu {
+    float: left;
+  }
+
+  .grid-container {
+    display: grid;
+    grid-template-columns: repeat(6, auto);
+    grid-row-gap: 5px;
+    grid-column-gap: 5px;
+    width: 1000px;
+    max-width: 95vw;
+    justify-content: center;
+    margin: 5px auto;
+    padding: 5px;
+  }
+
+  .item-a {
+    grid-column-start: 1;
+    text-align: right;
+  }
+
+  .item-e {
+    grid-column-start: 6;
+    text-align: left;
+  }
+  
+  #dimensions,
+  .wide-input {
+    grid-column-start: 2;
+    grid-column: span 4;
+  }
+ 
+  .svg-icon {
+    vertical-align: middle;
+  }  
+
+  label {
+    margin: auto 0px;
+  }
+
+  input[type="text"],
+  input[type="password"] {
+    height: 20px;
+    margin: auto 0px;
+  }
+  
+  input[type=number] {
+    appearance: textfield;
+  }
+  
+  #mdns_host {
+    width: 150px;
+  }
+
+  #rows,
+  #columns {
+    width: 30px;
+  }
+
+  button {
+    border: 0;
+    border-radius: 0.3rem;
+    color: #faffff;
+    background: #1fa3ec;
+    line-height: 2.4rem;
+    font-size: 1.2rem;
+    width: 100%;
+    transition-duration: 0.4s;
+    cursor: pointer;
+    margin: 5px 0px;
+    grid-column: span 5;
+  }
+  button:hover {
+    background: #0e70a4;
+  }
+  </style>
+</head>
+
+<body>
+  <a id="return_main_menu" href="./index.htm"><svg height="24px" width="24px" viewBox="0 0 16 16" id="Layer_1" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><path fill="white" d="M15.45,7L14,5.551V2c0-0.55-0.45-1-1-1h-1c-0.55,0-1,0.45-1,1v0.553L9,0.555C8.727,0.297,8.477,0,8,0S7.273,0.297,7,0.555  L0.55,7C0.238,7.325,0,7.562,0,8c0,0.563,0.432,1,1,1h1v6c0,0.55,0.45,1,1,1h3v-5c0-0.55,0.45-1,1-1h2c0.55,0,1,0.45,1,1v5h3  c0.55,0,1-0.45,1-1V9h1c0.568,0,1-0.437,1-1C16,7.562,15.762,7.325,15.45,7z"/></svg></a>
+
+  <h3>Enter your configuration data here.</h3>
+  <h5>If a field is left blank the previously saved value for that field will not be overwritten.</h5>
+
+  <form id="save_config" action="/save_config" method="post"></form>
+  <div class="grid-container">
+    <label class="item-a">SSID</label>
+    <input id="ssid" class="wide-input" form="save_config" placeholder="type WiFi network name here" name="ssid" maxlength="32" autocomplete="off">
+
+    <label class="item-a">Password</label>
+    <input id="password" class="wide-input" form="save_config" name="password" placeholder="type WiFi password here" type="password" maxlength="63" autocomplete="off">
+    <input id="show" type="checkbox" onclick="sp()" name="" style="position: absolute; opacity: 0; width: 0; height: 0;">
+    <label class="item-e" id="show_lbl" for="show">
+      <svg id="pwd_visible" class="svg-icon" width="20px" height="20px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M1 12C1 12 5 20 12 20C19 20 23 12 23 12" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="12" cy="12" r="3" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <svg id="pwd_hidden" class="svg-icon" style="display: none" width="20px" height="20px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2 2L22 22" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M6.71277 6.7226C3.66479 8.79527 2 12 2 12C2 12 5.63636 19 12 19C14.0503 19 15.8174 18.2734 17.2711 17.2884M11 5.05822C11.3254 5.02013 11.6588 5 12 5C18.3636 5 22 12 22 12C22 12 21.3082 13.3317 20 14.8335" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M14 14.2362C13.4692 14.7112 12.7684 15.0001 12 15.0001C10.3431 15.0001 9 13.657 9 12.0001C9 11.1764 9.33193 10.4303 9.86932 9.88818" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </label>
+
+    <label class="item-a">mDNS address</label>
+    <label>http://</label>
+    <input id="mdns_host" form="save_config" name="mdns_host" type="text" autocapitalize="none" maxlength="30" autocomplete="off">
+    <label>.local</label>
+
+    <label class="item-a">IANA Timezone</label>
+    <input id="iana_tz" class="wide-input" form="save_config" placeholder="type IANA timezone here" name="iana_tz" onchange="handle_iana_tz_change(false)" autocomplete="off">
+
+    <label class="item-a">POSIX Timezone</label>
+    <input id="posix_tz" class="wide-input" form="save_config" placeholder="type POSIX timezone here" name="posix_tz" autocomplete="off">
+
+    <label class="item-a">VoiceRSS API Key</label>
+    <input id="tts_api_key" class="wide-input" form="save_config" placeholder="type API key for VoiceRSS here" name="tts_api_key" maxlength="32" autocomplete="off">
+    <button form="save_config" type="submit" value="Save">Save</button>
+  </div>
+
+  <script>
+    base_url = "";
+    if (window.location.protocol == "file:") {
+      // makes for easier debugging.
+      // if html is loaded locally, can see the results of editing more easily.
+      // otherwise every change to html would require uploading new version to microcontroller.
+      base_url = "http://smartbutton.local";
+    }
+
+    async function handle_iana_tz_change(fetch_iana) {
+      // for the time.h functions to work correctly (and automatically) with DST we must set TZ with the proper POSIX timezone string.
+      // unfortunately APIs that return a POSIX timezone string are extremely rare.
+      // the service (timezoned.rop.nl from the ezTime library) we use requires an IANA timezone to return the POSIX timezone.
+      // this service does have the ability to geolocate IP addresses, but it only works for countries with one timezone.
+      // therefore we use a separate service to get our IANA timezone by geolocating our IP address.
+      // all of this could be done behind the scenes without exposing IANA and POSIX timezone inputs to the user; however geolocating
+      // IP addresses is not 100% reliable, so we need to give the user the option to manually enter data in these fields.
+      let iana_tz = document.getElementById("iana_tz").value;
+      if (fetch_iana || iana_tz === "") {
+        try {
+          const response = await fetch("http://worldtimeapi.org/api/ip"); // returns local time based on location of IP address
+          const datetime_json = await response.json();
+          iana_tz = datetime_json["timezone"];
+          document.getElementById("iana_tz").value = iana_tz;
+        }
+        catch(e) {
+          console.error(e);
+        }
+      }
+
+      if (iana_tz != "") {
+        let success = false;
+        try {
+          const response = await fetch(base_url+"/verify_timezone", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded"
+            },
+            body: "iana_tz=" + iana_tz
+          });
+          // TODO: need to check response code, might not be 200 !!!
+          success = true;
+        }
+        catch(e) {
+          console.error(e);
+          success = false;
+        }
+        if (success) {
+          setTimeout(get_timezone, 2000);
+        }
+      }
+    }
+
+    async function get_timezone() {
+      let is_default_tz = true;
+      try {
+        const response = await fetch(base_url+"/get_timezone");
+        const timezone = await response.json();
+        console.log(timezone);
+        is_default_tz = timezone["is_default_tz"];
+        let iana_tz = timezone["iana_tz"];
+        let posix_tz = timezone["posix_tz"];
+
+        let el_iana_tz = document.getElementById("iana_tz");
+        el_iana_tz.value = iana_tz;
+        document.getElementById("posix_tz").value = posix_tz;
+      }
+      catch(e) {
+        console.error(e);
+      }
+      return is_default_tz;
+    }
+
+    function sp() {
+      let pf = document.getElementById("password");
+      if (pf.type === "password") {
+        pf.type = "text";
+        document.getElementById("pwd_hidden").style.display = "block";
+        document.getElementById("pwd_visible").style.display = "none";
+      }
+      else {
+        pf.type = "password";
+        document.getElementById("pwd_visible").style.display = "block";
+        document.getElementById("pwd_hidden").style.display = "none";
+      }
+    }
+
+    async function get_config() {
+      try {
+        const response = await fetch(base_url+"/get_config");
+        const config = await response.json();
+        console.log(config);
+        document.getElementById("ssid").value = config["ssid"];
+        document.getElementById("mdns_host").value = config["mdns_host"];
+        document.getElementById("tts_api_key").value = config["tts_api_key"];
+      }
+      catch(e) {
+        console.error(e);
+      }
+    }
+
+    function run() {
+      get_config(); 
+      let is_default_tz = get_timezone();
+      if (is_default_tz) {
+        handle_iana_tz_change(true);
+      }
+    }
+
+    window.addEventListener("load", run);
+  </script>
+</body>
+</html>
+
