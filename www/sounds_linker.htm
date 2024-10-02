@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+  <meta http-equiv="Cache-Control" content="private, no-store" />
+  <title>Sound URLs</title>
+  <style>
+  html {
+    touch-action: manipulation;
+    overflow: auto;
+  }
+
+  body {
+    font-family: Arial, sans-serif;
+    color: #faffff;
+    background: #111;
+    font-size: 17px;
+    text-align: center;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #return_main_menu {
+    float: left;
+  }
+  
+  #main_div {
+    /*max-width: 1400px;*/
+    margin: 0 auto;
+  }
+
+  .grid-container {
+    display: grid;
+    /*grid-template-columns: repeat(11, minmax(20px, 340px));*/ /*fixes select element overflow grid width problem in chrome*/
+    grid-template-columns: repeat(4, auto);
+    grid-column-gap: 1vw;
+    grid-auto-rows: 30px;
+    grid-row-gap: 5px;
+    /*width: 1000px;*/
+    max-width: 95vw;
+    justify-content: center;
+    justify-items: center;
+    margin: 5px auto;
+    padding: 5px;
+    border-style: solid;
+  }
+
+  .item-a {
+    grid-column-start: 1;
+  }
+
+  /* this allows children element of section to be displayed as if they were direct children of the div grid */
+  section {
+    display: contents;
+  }
+
+  #button_container {
+    display: flex;
+    padding-bottom: 10px;
+    padding-top: 10px;
+    max-width: 600px;
+    margin: 5px auto;
+  }
+  .buttonclass {
+    flex:1;
+    padding-top:5px;
+    padding-bottom:5px;
+  }
+
+  input#fileid{
+    flex-grow: 1;
+    padding-top: 5px;
+    padding-bottom: 5px;
+    background: #222;
+    border: 1px solid #333;
+    padding-inline: 5px;
+    max-width: 225px;
+    border-radius: 7px;
+    font-family: Arial,sans-serif;
+    font-size: 15px;
+    color: #ddd;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .gap {
+    width:10px;
+  }
+
+  button {
+    background: #222;
+    border: 1px solid #333;
+    padding-inline: 5px;
+    width: 100%;
+    border-radius: 24px;
+    font-family: Arial, sans-serif;
+    font-size: 1em;
+    color: #ddd;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor:pointer;
+  }
+  /*
+  button:hover,
+  input[type="button"]:hover {
+    background: #0e70a4;
+  }
+  */
+
+  .buttonclass {
+    flex: 1;
+    padding-top: 5px;
+    padding-bottom: 5px;
+  }
+
+  .svg-icon {
+    vertical-align: middle;
+  }
+
+  .header {
+    text-align: center;
+  }
+
+  input[type="color"] {
+    margin: auto;
+  }
+
+  </style>
+</head>
+<body>
+  <a id="return_main_menu" href="./index.htm"><svg height="24px" width="24px" viewBox="0 0 16 16" id="Layer_1" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><path fill="white" d="M15.45,7L14,5.551V2c0-0.55-0.45-1-1-1h-1c-0.55,0-1,0.45-1,1v0.553L9,0.555C8.727,0.297,8.477,0,8,0S7.273,0.297,7,0.555  L0.55,7C0.238,7.325,0,7.562,0,8c0,0.563,0.432,1,1,1h1v6c0,0.55,0.45,1,1,1h3v-5c0-0.55,0.45-1,1-1h2c0.55,0,1,0.45,1,1v5h3  c0.55,0,1-0.45,1-1V9h1c0.568,0,1-0.437,1-1C16,7.562,15.762,7.325,15.45,7z"/></svg></a>
+  <h3>Link Sounds</h3>
+  <div id="main_div">
+    <div id="button_container">
+      <!--input type="text" id="fileid" maxlength=26 placeholder="Enter filename here." value="" autocomplete="off" /-->
+      <div id="gap1" class="gap"></div>
+      <button id="btn_save" class="buttonclass" onclick="save()"><svg class="svg-icon" style="width:36px;height:36px" viewBox="0 0 24 24"> <path id="sendSvgP" fill="currentColor" d="M6.5 20Q4.22 20 2.61 18.43 1 16.85 1 14.58 1 12.63 2.17 11.1 3.35 9.57 5.25 9.15 5.88 6.85 7.75 5.43 9.63 4 12 4 14.93 4 16.96 6.04 19 8.07 19 11 20.73 11.2 21.86 12.5 23 13.78 23 15.5 23 17.38 21.69 18.69 20.38 20 18.5 20H13Q12.18 20 11.59 19.41 11 18.83 11 18V12.85L9.4 14.4L8 13L12 9L16 13L14.6 14.4L13 12.85V18H18.5Q19.55 18 20.27 17.27 21 16.55 21 15.5 21 14.45 20.27 13.73 19.55 13 18.5 13H17V11Q17 8.93 15.54 7.46 14.08 6 12 6 9.93 6 8.46 7.46 7 8.93 7 11H6.5Q5.05 11 4.03 12.03 3 13.05 3 14.5 3 15.95 4.03 17 5.05 18 6.5 18H9V20M12 13Z"></path> </svg>&nbsp; Save</button>
+    </div>
+    <div id="sounds_container" class="grid-container">
+        <section id="title_row">
+            <label class="item-a">Add/Remove</label>
+            <label>Move</label>
+            <label>Description</label>
+            <label>Sound</label>
+        </section>
+    </div>
+  </div>
+
+  <script>
+let base_url = "";
+if (window.location.protocol == "file:") {
+  // makes for easier debugging.
+  // if html is loaded locally, can see the results of editing more easily.
+  // otherwise every change to html would require uploading new version to microcontroller.
+  base_url = "http://smartbutton.local";
+}
+
+async function save() {
+  let sounds_dict = {};
+
+  sounds_dict["sounds"] = [];
+
+  let sounds = document.querySelectorAll("section[data-sound]");
+  for (let i = 0; i < sounds.length; i++) {
+    let event = sounds[i];
+    let el_keys = event.querySelectorAll("[data-key]");
+    let eobj = {};
+    let save_color = false;
+    for (let j = 0; j < el_keys.length; j++) {
+      let el_key = el_keys[j];
+
+      let key = el_key.getAttribute("data-key");
+      let value;
+      // description
+      if (key === "d") {
+        //value = encodeURIComponent(el_key.value); // text can have special characters, so need to encode them.
+        value = el_key.value;
+      }
+
+      // URL
+      if (key === "u") {
+        //value = encodeURIComponent(el_key.value); // text can have special characters, so need to encode them.
+        value = el_key.value;
+      }
+
+      //stringify() wraps numbers in quotes so wrap numbers in !! to make it easy to remove the quotes.
+      //any number that you want to represented as a number in json should have the value set above here. 
+      if (value && !isNaN(value)) {
+        value = "!!"+value+"!!";
+      }
+
+      if (value || value === "") { // value === "" allows for blank descriptions. TODO: bad idea? let's other blank things through causing bugs?
+        eobj[key] = value;
+      }
+    }
+    sounds_dict["sounds"].push(eobj);
+  }
+  let json = JSON.stringify(sounds_dict);
+  const regex = /"!!(-?[0-9]+\.{0,1}[0-9]*)!!"/g 
+  json = json.replace(regex, '$1')
+  console.log(json);
+  json = encodeURIComponent(json);
+
+  //console.log(`id=sounds.json&json=` + json);
+
+/*
+  let success = false;
+  try {
+    const t = await fetch(base_url+"/save", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: "id=/files/soundURLs.json&json=" + json
+    });
+    reply = await t.json();
+    console.log(reply);
+    success = true;
+  }
+  catch(e) {
+    console.error(e);
+    success = false;
+  }
+
+  let sb = document.getElementById("sendSvgP");
+  if (success) {
+    sb.setAttribute("fill", "#056b0a");
+    setTimeout(function(){sb.setAttribute("fill", "#eee")}, 1000);
+  }
+  else {
+    sb.setAttribute("fill", "#6b050c");
+    setTimeout(function(){sb.setAttribute("fill", "#777")}, 1000);
+  }
+*/
+}
+
+
+function handle_move(num_id, direction) {
+  let section = document.getElementById(`s${num_id}`);
+  let new_section = document.createDocumentFragment();
+  new_section.appendChild(section.cloneNode(true));
+  let sounds_container = document.getElementById("sounds_container");
+  if (direction === "up") {
+    if (section.previousElementSibling.id != "title_row") {
+      sounds_container.insertBefore(new_section, section.previousElementSibling);
+      section.remove();
+    }
+  }
+  else if (direction === "down") {
+    if (section.nextElementSibling.id != "add_sound_button") {
+      sounds_container.insertBefore(new_section, section.nextElementSibling.nextElementSibling);
+      section.remove();
+    }
+  }
+}
+
+
+let sound_html_template = `
+<section id="e!!SOUND_NUM!!" data-sound="e!!SOUND_NUM!!">
+    <input type="button" value="x" style="width: 20px; color:white;background-color:red" onclick=(function(){document.getElementById("e!!SOUND_NUM!!").remove()})() />
+
+    <div>
+      <input type="button" value="↑" onclick="handle_move(!!SOUND_NUM!!, 'up')" />
+      <input type="button" value="↓" onclick="handle_move(!!SOUND_NUM!!, 'down')" />
+    </div>
+
+    <input id="s!!SOUND_NUM!!d" type="text" data-key="d" value="" placeholder="Enter short description." autocomplete="off" />
+    <input id="s!!SOUND_NUM!!u" type="text" data-key="u" value="" placeholder="Enter URL to mp3 file. http only" size="50" autocomplete="off" />
+</section>`;
+
+
+async function add_sound_fields() {
+  add_sound_fields.sound_num = add_sound_fields.sound_num || 0;
+  let i = add_sound_fields.sound_num; 
+  let sounds_container = document.getElementById("sounds_container");
+  let sound_html = sound_html_template.replaceAll("!!SOUND_NUM!!", i); 
+  let add_sound_button = document.getElementById("add_sound_button");
+  add_sound_button.insertAdjacentHTML("beforebegin", sound_html);
+
+  i++
+  add_sound_fields.sound_num = i; 
+}
+
+
+async function load_sounds() {
+/*
+  let sounds;
+  await fetch(base_url+"/files/sound_URLs.json").then((response) => {
+    if (response.ok) {
+      return response.json();
+    }
+    throw new Error('Error fetching sound_URLs.json');
+  })
+  .then((json) => {
+    sounds = json["sounds"];
+  })
+  .catch((error) => {
+    console.log(error)
+  });
+*/
+
+  let sounds_json = JSON.parse('{"sounds":[{"d":"Ding Dong","u":"http://www.example.com/ding_dong.mp3"},{"d":"Alert!","u":"http://www.example.com/alert.mp3"}]}');
+  let sounds = sounds_json["sounds"];
+  if (sounds) {
+    for (let i = 0; i < sounds.length; i++) {
+      add_sound_fields();
+
+      document.getElementById(`s${i}d`).value = sounds[i]["d"];
+      document.getElementById(`s${i}u`).value = sounds[i]["u"];
+    }
+  }
+}
+
+async function run() {
+  let sounds_container = document.getElementById("sounds_container");
+  let add_sound_button_html = `<input id="add_sound_button" type="button" value="+" onclick="add_sound_fields()" />`;
+  sounds_container.insertAdjacentHTML("beforeend", add_sound_button_html);
+  load_sounds();
+}
+
+window.addEventListener("load", run);
+
+  </script>
+
+</body>
+</html>

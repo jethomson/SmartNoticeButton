@@ -28,18 +28,20 @@
   
   #main_div {
     /*max-width: 1400px;*/
-    margin: auto;
+    margin: 0 auto;
   }
 
   .grid-container {
     display: grid;
-    grid-template-columns: repeat(11, minmax(20px, 340px)); /*fixes select element overflow grid width problem in chrome*/
+    /*grid-template-columns: repeat(11, minmax(20px, 340px));*/ /*fixes select element overflow grid width problem in chrome*/
+    grid-template-columns: repeat(12, auto);
     grid-column-gap: 1vw;
     grid-auto-rows: 30px;
     grid-row-gap: 5px;
     /*width: 1000px;*/
     max-width: 95vw;
     justify-content: center;
+    justify-items: center;
     margin: 5px auto;
     padding: 5px;
     border-style: solid;
@@ -131,8 +133,8 @@
 </head>
 <body>
   <a id="return_main_menu" href="./index.htm"><svg height="24px" width="24px" viewBox="0 0 16 16" id="Layer_1" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><path fill="white" d="M15.45,7L14,5.551V2c0-0.55-0.45-1-1-1h-1c-0.55,0-1,0.45-1,1v0.553L9,0.555C8.727,0.297,8.477,0,8,0S7.273,0.297,7,0.555  L0.55,7C0.238,7.325,0,7.562,0,8c0,0.563,0.432,1,1,1h1v6c0,0.55,0.45,1,1,1h3v-5c0-0.55,0.45-1,1-1h2c0.55,0,1,0.45,1,1v5h3  c0.55,0,1-0.45,1-1V9h1c0.568,0,1-0.437,1-1C16,7.562,15.762,7.325,15.45,7z"/></svg></a>
-  <h3>Create Notifications</h3>
-
+  <h3 style="margin-bottom: 0">Create Notifications</h3>
+  <h6 style="margin-top: 0">Columns marked with a * are optional.</h6>
   <div id="main_div">
     <div id="button_container">
       <!--input type="text" id="fileid" maxlength=26 placeholder="Enter filename here." value="" autocomplete="off" /-->
@@ -146,18 +148,20 @@
             <label>Description</label>
             <label>Frequency</label>
             <label>Start Date</label>
-            <label>End Date</label>
+            <label>End Date*</label>
             <label>Time</label>
-            <label>Exclude</label>
+            <label>Exclude*</label>
             <label>Visual Pattern</label>
             <label>Color Chooser</label>
-            <label>Audio</label>
+            <label>Sound*</label>
+            <label>Voice*</label>
         </section>
     </div>
   </div>
 
-<script>
-base_url = "";
+  <script>
+let timezone_API_URL = "http://worldtimeapi.org/api/timezone/";
+let base_url = "";
 if (window.location.protocol == "file:") {
   // makes for easier debugging.
   // if html is loaded locally, can see the results of editing more easily.
@@ -258,8 +262,7 @@ async function save() {
       let value;
       // description
       if (key === "d") {
-        //value = encodeURIComponent(el_key.value); // text can have special characters, so need to encode them.
-        value = el_key.value;
+        value = encodeURIComponent(el_key.value); // text can have special characters, so need to encode them.
       }
 
       // frequency
@@ -268,15 +271,24 @@ async function save() {
         value = opt.value;
       }
 
-      // start date OR end date
-      if (key === "sd" || key === "ed") {
-        //value = el_key.value.split("-").map((s) => {return "!!" + parseInt(s, 10) + "!!"});
+      // start date
+      if (key === "sd") {
         value = el_key.value.split("-").map((s) => {return parseInt(s, 10)});
+      }
+
+      // end date -- end date can be left unset by the user to indicate the event should never end
+      // if the end date is not set then replace the empty string with 1900-01-01 which the backend uses
+      // to represent never ends
+      if (key === "ed") {
+        value = [1900, 1, 1];
+        // a completely unset date or a partially set date both result in an empty string
+        if (el_key.value != "") {
+          value = el_key.value.split("-").map((s) => {return parseInt(s, 10)});
+        }
       }
 
       // time
       if (key === "t") {
-        //value = el_key.value.split(":").map((s) => {return "!!" + parseInt(s, 10) + "!!"});
         value = el_key.value.split(":").map((s) => {return parseInt(s, 10)});
       }
 
@@ -288,7 +300,6 @@ async function save() {
           let opt = options[k];
           value += (1 << opt.value);
         }
-        //value = "!!" + value + "!!";
       }
 
       // pattern
@@ -297,8 +308,14 @@ async function save() {
         value = opt.value;
       }
 
-      // audio
-      if (key === "a") {
+      // sound 
+      if (key === "s") {
+        let opt = el_key.options[el_key.selectedIndex];
+        value = opt.value;
+      }
+
+      // voice
+      if (key === "v") {
         let opt = el_key.options[el_key.selectedIndex];
         value = opt.value;
       }
@@ -317,7 +334,7 @@ async function save() {
         }
       }
 
-      if (value || value === "") { // value === "" allows for blank descriptions. TODO: bad idea? let's other blank things through causing bugs?
+      if (value) {
         eobj[key] = value;
       }
     }
@@ -330,7 +347,7 @@ async function save() {
   json = encodeURIComponent(json);
 
   //console.log(`id=events.json&json=` + json);
-/*
+
   let success = false;
   try {
     const t = await fetch(base_url+"/save", {
@@ -358,48 +375,150 @@ async function save() {
     sb.setAttribute("fill", "#6b050c");
     setTimeout(function(){sb.setAttribute("fill", "#777")}, 1000);
   }
-*/
+
 }
 
-async function create_audio_options() {
-  let audio_options_html = `
+async function create_pattern_options() {
+  let pattern_options_html = "";
+  try {
+    const response = await fetch(base_url+"/patterns.json");
+    if (!response.ok) {
+      throw new Error('Error fetching patterns.json');
+    }
+    let data = await response.json();
+    //console.log(data);
+    options = data["patterns"]
+    if (options) {
+      for (let i = 0; i < options.length; i++) {
+        let option = options[i];
+        pattern_options_html += `
+     <option value="${option['v']}">${option['n']}</option>`;
+      }
+    }
+  }
+  catch(e) {
+    console.error(e);
+  }
+
+  return pattern_options_html;
+}
+
+async function create_color_options() {
+  let color_options_html = "";
+  //let color_names = ["Custom", "Black (Off)", "White", "Red", "Yellow", "Orange", "Green", "Aqua", "Blue", "Purple", "Pink", "Rainbow", "Red/Green", "Orange/Blue"];
+  let color_names = ["Custom", "Black (Off)", "White", "Red", "Yellow", "Orange", "Green", "Aqua", "Blue", "Purple", "Pink"];
+  //let color_values = ["0x00FFFFFF", "0x00000000", "00x00FFFFFF", "0x00FF0000", "0x00FFFF00", "0x00FFA500", "0x0000FF00", "0x0000FFFF", "0x000000FF", "0x00800080", "0x00FFC0CB", "0x01000000", "0x01000001", "0x01000002"];
+  let color_values = ["0x00FFFFFF", "0x00000000", "00x00FFFFFF", "0x00FF0000", "0x00FFFF00", "0x00FFA500", "0x0000FF00", "0x0000FFFF", "0x000000FF", "0x00800080", "0x00FFC0CB"];
+  color_options_html += `      <optgroup label="From Color Picker"><option value="${color_values[0]}">${color_names[0]} (${color_values[0].replace('0x00', '#')})</option></optgroup>\r\n`
+  color_options_html += `      <optgroup label="Predefined">\r\n`
+  for (let i = 1; i < color_names.length; i++) {
+    color_options_html += `      <option value="${color_values[i]}">${color_names[i]}</option>\r\n`
+  }
+
+  try {
+    const response = await fetch(base_url+"/special_colors.json");
+    if (!response.ok) {
+      throw new Error('Error fetching special_colors.json');
+    }
+    let data = await response.json();
+    //console.log(data);
+    options = data["special_colors"]
+    if (options) {
+      for (let i = 0; i < options.length; i++) {
+        let option = options[i];
+        color_options_html += `
+     <option value="${option['v']}">${option['n']}</option>`;
+      }
+    }
+  }
+  catch(e) {
+    console.error(e);
+  }
+
+  color_options_html += `      </optgroup>\r\n`
+  return color_options_html;
+}
+
+
+async function create_sound_options() {
+  let sound_options_html = `
+    <option value="null">No sound</option>
   <optgroup id="s" label="Sounds">
     <option value="chime.mp3">Chime</option>
+  </optgroup>
+  <optgroup id="s" label="URLs">
+    <option value="http://example.com/mysound.mp3">My_URL_sound</option>
   </optgroup>`;
+  return sound_options_html;
+}
 
-  await fetch(base_url+"/voicerss.json").then((response) => {
-    if (response.ok) {
-      return response.json();
+
+async function create_voice_options() {
+/*
+  let voice_options_html = `
+    <option value="null">No speech</option>
+  <optgroup id="v" label="Voices">
+    <option value="en-ca&v=Clara">Clara</option>
+    <option value="en-gb&v=Harry">Harry</option>
+  </optgroup>`;
+*/
+
+  let voice_options_html = `
+    <option value="null">No speech</option>`;
+
+  let default_voice;
+  try {
+    const response = await fetch(base_url+"/get_default_voice");
+    if (!response.ok) {
+      throw new Error('Error fetching get_default_voice');
     }
-    throw new Error('Something went wrong');
-  })
-  .then((json) => {
-    let optgroups = json["og"];
+    let data = await response.json();
+    //console.log(data);
+    default_voice = data["tts_default_voice"]
+  }
+  catch(e) {
+    console.error(e);
+  }
+
+  try {
+    const response = await fetch(base_url+"/voicerss.json");
+    if (!response.ok) {
+      throw new Error('Error fetching voicerss.json');
+    }
+    let data = await response.json();
+    //console.log(data);
+    let optgroups = data["og"];
     if (optgroups) {
-        audio_options_html += `
+        voice_options_html += `
   <optgroup id="v" label="Voices">`;
       for (let i = 0; i < optgroups.length; i++) {
         let optgroup = optgroups[i];
-        audio_options_html += `
+        voice_options_html += `
     <optgroup label="&nbsp;&nbsp;${optgroup['l']}">`;
         let options = optgroup['o'];
         for (let j = 0; j < options.length; j++) {
           let option = options[j];
-          audio_options_html += `
+          if (option['t'] === default_voice) {
+            voice_options_html += `
+      <option value="${option['v']}" selected="selected">&nbsp;&nbsp;${option['t']}</option>`;
+          }
+          else {
+            voice_options_html += `
       <option value="${option['v']}">&nbsp;&nbsp;${option['t']}</option>`;
+          }
         }
-        audio_options_html += `
+        voice_options_html += `
     </optgroup>`;
       }
-        audio_options_html += `
+        voice_options_html += `
   </optgroup>`;
     }
-  })
-  .catch((error) => {
-    console.log(error)
-  });
+  }
+  catch(e) {
+    console.error(e);
+  }
 
-  return audio_options_html;
+  return voice_options_html;
 }
 
 
@@ -415,8 +534,7 @@ function handle_move(num_id, direction) {
     }
   }
   else if (direction === "down") {
-    console.log("down");
-    if (section.nextElementSibling.id != "btn_add_event") {
+    if (section.nextElementSibling.id != "add_event_buttons_div") {
       events_container.insertBefore(new_section, section.nextElementSibling.nextElementSibling);
       section.remove();
     }
@@ -437,7 +555,7 @@ function handle_exclude_select(el_changed, event) {
     for (let i = 0; i < el_selects.length; i++) {
       let el_select = el_selects[i];
       el_select.style.height = "100%";
-      el_select.style.overflow = "scroll";
+      el_select.style.overflow = "hidden";
       el_select.style.zIndex = "auto";
     }
   }
@@ -455,82 +573,68 @@ function handle_exclude_select(el_changed, event) {
 }
 
 
-function handle_color_picker(el_changed, event) {
-  console.log(event.type);
-  if (event.type == "input") {
-    let i = parseInt(el_changed.id.replace("e", "").replace("cp", ""));
-    let color_select = document.getElementById(`e${i}c`);
-    let custom_option = color_select.options[0];
-    let color = el_changed.value.replace("#", "").toUpperCase();
-    custom_option.innerHTML = `Custom (${el_changed.value})`
-    custom_option.value = `0x00${color}`
-    custom_option.selected = true;
-    color_select.dispatchEvent(new Event('change'));
-  }
+function handle_color_picker(el_changed) {
+  let i = parseInt(el_changed.id.replace("e", "").replace("cp", ""));
+  let color_select = document.getElementById(`e${i}c`);
+  let custom_option = color_select.options[0];
+  let color = el_changed.value.replace("#", "").toUpperCase();
+  custom_option.innerHTML = `Custom (${el_changed.value.toUpperCase()})`
+  custom_option.value = `0x00${color}`
+  custom_option.selected = true;
+  color_select.dispatchEvent(new Event('change'));
 }
 
 
-function handle_color_select(el_changed, event) {
-  console.log(event.type);
-  if (event.type == "change") {
-    let i = parseInt(el_changed.id.replace("e", "").replace("c", ""));
-    let color = `#${el_changed.value.slice(4)}`;
-    console.log(el_changed.value);
-    console.log(color);
-    let color_picker = document.getElementById(`e${i}cp`);
-    color_picker.value = color;
-    let overlay_color = document.getElementById(`e${i}ol`);
-    //console.log(el_changed.selectedOptions[0].innerHTML);
-    if (el_changed.selectedOptions[0].innerHTML === "Rainbow") {
-      //overlay_color.style.background = "linear-gradient(90deg, red 0%, orange 14.29%, yellow 28.57%, green 42.86%, aqua 57.14%, blue 71.43%, purple 85.71%, pink 100%)";
-      overlay_color.style.backgroundImage = "linear-gradient(90deg, red, orange, yellow, green, aqua, blue, purple, pink)";
-    }
-    else if (el_changed.selectedOptions[0].innerHTML === "Red/Green") {
-      overlay_color.style.backgroundImage = "linear-gradient(90deg, red, green)";
-    }
-    else if (el_changed.selectedOptions[0].innerHTML === "Orange/Blue") {
-      overlay_color.style.backgroundImage = "linear-gradient(90deg, orange, blue)";
-    }
-    else {
-      overlay_color.style.background = "none";
-    }
+function handle_color_select(el_changed) {
+  let i = parseInt(el_changed.id.replace("e", "").replace("c", ""));
+  let color = `#${el_changed.value.slice(4)}`;
+  let color_picker = document.getElementById(`e${i}cp`);
+  color_picker.value = color;
+  let overlay_color = document.getElementById(`e${i}ol`);
+  overlay_color.innerText = ""; 
+  if (el_changed.selectedOptions[0].innerHTML === "Rainbow") {
+    //overlay_color.style.background = "linear-gradient(90deg, red 0%, orange 14.29%, yellow 28.57%, green 42.86%, aqua 57.14%, blue 71.43%, purple 85.71%, pink 100%)";
+    overlay_color.style.backgroundImage = "linear-gradient(90deg, red, orange, yellow, green, aqua, blue, purple, pink)";
+  }
+  else if (el_changed.selectedOptions[0].innerHTML.indexOf(" and ") > -1) {
+    let color1 = el_changed.selectedOptions[0].innerHTML.split(" and ")[0];
+    let color2 = el_changed.selectedOptions[0].innerHTML.split(" and ")[1];
+    overlay_color.style.backgroundImage = `linear-gradient(90deg, ${color1}, ${color2})`; 
+  }
+  else if (el_changed.selectedOptions[0].innerHTML === "?????") {
+    overlay_color.innerText = "?????";
+    overlay_color.style.backgroundColor = "white"; 
+    overlay_color.style.backgroundImage = "none"; 
+  }
+  else {
+    overlay_color.style.background = "none";
   }
 }
-
 
 let event_html_template = "";
 async function create_event_html_template() {
   let exclude_options_html = "";
   let days = ["☐ Sunday", "☐ Monday", "☐ Tuesday", "☐ Wednesday", "☐ Thursday", "☐ Friday", "☐ Saturday"];
-  for (let j = 0; j < days.length; j++) {
-    exclude_options_html += `      <option value="${j}">${days[j]}</option>\r\n`
+  for (let i = 0; i < days.length; i++) {
+    exclude_options_html += `      <option value="${i}">${days[i]}</option>\r\n`
   }
 
-  let color_options_html = "";
-  //let colors = ["Custom (0x00------)", "Red (0x00FF0000)", "Yellow (0x00FFFF00)", "Orange (0x00FFA500)", "Green (0x0000FF00)", "Aqua (0x0000FFFF)", "Blue (0x000000FF)", "Purple (0x00800080)", "Pink (0x00FFC0CB)", "White (0x00FFFFFF)", "Black/Off (0x00000000)", "Rainbow (0xFFFFFFFF)"];
-  let color_names = ["Custom", "Red", "Yellow", "Orange", "Green", "Aqua", "Blue", "Purple", "Pink", "White", "Black/Off", "Rainbow", "Red/Green", "Orange/Blue"];
-  let color_values = ["0x00FFFFFF", "0x00FF0000", "0x00FFFF00", "0x00FFA500", "0x0000FF00", "0x0000FFFF", "0x000000FF", "0x00800080", "0x00FFC0CB", "0x00FFFFFF", "0x00000000", "0x01000000", "0x01000001", "0x01000002"];
-  //let colors = ["Red (0x00FF"];
-  color_options_html += `      <optgroup label="From Color Picker"><option value="${color_values[0]}">${color_names[0]} (${color_values[0].replace('0x00', '#')})</option></optgroup>\r\n`
-  color_options_html += `      <optgroup label="Predefined">\r\n`
-  for (let j = 1; j < color_names.length; j++) {
-    color_options_html += `      <option value="${color_values[j]}">${color_names[j]}</option>\r\n`
-  }
-  color_options_html += `      </optgroup>\r\n`
+  let pattern_options_html = await create_pattern_options();
+  let color_options_html = await create_color_options();
 
-  let audio_options_html = await create_audio_options();
-  //let audio_options_html = `<optgroup id="s" label="Sounds"><option value="chime.mp3">Chime</option></optgroup>`;
+  let sound_options_html = await create_sound_options();
+  let voice_options_html = await create_voice_options();
 
   event_html_template = `
 <section id="e!!EVENT_NUM!!" data-event="e!!EVENT_NUM!!">
-    <input type="button" value="-" onclick="function(){document.getElementById("e!!EVENT_NUM!!").remove()}" />
+    <input type="button" value="x" style="width: 20px; color:white;background-color:red" onclick=(function(){document.getElementById("e!!EVENT_NUM!!").remove()})() />
 
     <div>
       <input type="button" value="↑" onclick="handle_move(!!EVENT_NUM!!, 'up')" />
       <input type="button" value="↓" onclick="handle_move(!!EVENT_NUM!!, 'down')" />
     </div>
 
-    <input id="e!!EVENT_NUM!!d" type="text" data-key="d" value="" autocomplete="off" />
+    <input id="e!!EVENT_NUM!!d" type="text" data-key="d" value="" maxlenght=100 autocomplete="off" />
     <select id="e!!EVENT_NUM!!f" data-key="f" autocomplete="off">
       <option value="o">Once</option>
       <!--option value="h">Hourly</option-->
@@ -538,100 +642,151 @@ async function create_event_html_template() {
       <option value="w">Weekly</option>
       <option value="m">Monthly</option>
       <option value="y">Yearly</option>
-      <option value="t">Test</option>
       <!--option value="s">Start of Month</option-->
       <!--option value="e">End of Month</option-->
     </select>
     <input id="e!!EVENT_NUM!!sd" type="date" data-key="sd" value="" min="" max="" />
     <input id="e!!EVENT_NUM!!ed" type="date" data-key="ed" value="" min="" max="" />
     <input id="e!!EVENT_NUM!!t" type="time" data-key="t" value="" min="" max="" />
-    <select id="e!!EVENT_NUM!!e" data-key="e" autocomplete="off" multiple size="7" onmouseenter="handle_exclude_select(this, event)" onmouseleave="handle_exclude_select(this, event)" onchange="handle_exclude_select(this, event)">;
+    <select id="e!!EVENT_NUM!!e" data-key="e" autocomplete="off" multiple size="7" style="overflow:hidden" onmouseenter="handle_exclude_select(this, event)" onmouseleave="handle_exclude_select(this, event)" onchange="handle_exclude_select(this, event)">;
 ${exclude_options_html}
     </select>
     <select id="e!!EVENT_NUM!!p" data-key="p" autocomplete="off">
-      <option value="0">Breathe</option>
-      <option value="1">Blink</option>
-      <option value="2">Spin</option>
+${pattern_options_html}
     </select>
     <!--keep as example of data-setting-for -->
     <!--input id="e!!EVENT_NUM!!rdc" type="radio" name="e!!EVENT_NUM!!cc" data-setting-for="im,p,t,n" data-key="ct" value="0" autocomplete="off" onchange="enable_disable_color_input(this, 'e!!EVENT_NUM!!c')" disabled checked /-->
-    <div style="display:flex">
-      <div style="position:relative">
-        <input id="e!!EVENT_NUM!!cp" type="color" autocomplete="off" value="#FFFFFF" oninput="handle_color_picker(this, event)" />
-        <div id="e!!EVENT_NUM!!ol" style="position: absolute; top: 0; left: 0; margin: 0; border: none; width: 100%; height: 100%; pointer-events: none"></div>
+    <div style="display:flex; width: 100%">
+      <div style="position:relative; contain: paint">
+        <input id="e!!EVENT_NUM!!cp" type="color" autocomplete="off" value="#FFFFFF" oninput="handle_color_picker(this)" />
+        <div id="e!!EVENT_NUM!!ol" style="position: absolute; top: 0; left: 0; margin: 0; border: none; width: 100%; height: 100%; pointer-events: none; color: black; display: flex; justify-content: center; align-content: center; flex-direction: column;"></div>
       </div>
-      <select id="e!!EVENT_NUM!!c" data-key="c" autocomplete="off" onchange="handle_color_select(this, event)">
+      <select id="e!!EVENT_NUM!!c" data-key="c" autocomplete="off" style="flex-grow:1" onchange="handle_color_select(this)">
 ${color_options_html}
       </select>
     </div>
-    <select id="e!!EVENT_NUM!!a" data-key="a" autocomplete="off">
-${audio_options_html}
+    <select id="e!!EVENT_NUM!!s" data-key="s" autocomplete="off">
+${sound_options_html}
+    </select>
+    <select id="e!!EVENT_NUM!!v" data-key="v" autocomplete="off">
+${voice_options_html}
     </select>
 </section>`;
 }
 
 
-async function add_default_event(fetch_time) {
-  add_default_event.event_num = add_default_event.event_num || 0; 
+async function add_basic_event(is_new, milliseconds_from_now) {
+  add_basic_event.event_num = add_basic_event.event_num || 0;
+  let i = add_basic_event.event_num; 
   let events_container = document.getElementById("events_container");
-  let event_html = event_html_template.replaceAll("!!EVENT_NUM!!", add_default_event.event_num); 
+  let event_html = event_html_template.replaceAll("!!EVENT_NUM!!", i); 
   //events_container.insertAdjacentHTML("beforeend", event_html);
-  let add_event_button = document.getElementById("btn_add_event");
+  let add_event_buttons_div = document.getElementById("add_event_buttons_div");
   //events_container.insertBefore(event_html, add_event_button);
-  add_event_button.insertAdjacentHTML("beforebegin", event_html);
+  add_event_buttons_div.insertAdjacentHTML("beforebegin", event_html);
 
-  // set defaults
+  if (is_new) {
+    document.getElementById(`e${i}d`).value = `Event ${i}`;
 
-  if (fetch_time) {
     //privacy.resistFingerprinting prevents this from working correctly
     //const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     //console.log(timezone);
+  
+    let datetime_local;
+    try {
+      const response = await fetch(timezone_API_URL);
+      if (!response.ok) {
+        throw new Error('Error fetching time');
+      }
+      let data = await response.json();
+      //console.log(data);
+      datetime_local = data["datetime"]
+    }
+    catch(e) {
+      console.error(e);
+    }
 
-    let response = await fetch("http://worldtimeapi.org/api/ip"); // returns local time based on location of IP address
-    let datetime_json = await response.json();
-    //console.log(datetime_json);
-    console.log(datetime_json["datetime"]);
-    let datetime_local = datetime_json["datetime"];
     datetime_local = datetime_local.split(".")[0]; // in order to get local hours split at decimal to discard timezone
     let now = new Date(datetime_local);
-    console.log(now.getHours());
-    console.log(now.toLocaleString());
     let sd = new Date();
-    sd.setTime(now.getTime()+3600000); // add one hour in milliseconds
-    console.log(sd.toLocaleString());
+    sd.setTime(now.getTime()+milliseconds_from_now);
     //https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/setTime
 
-    document.getElementById(`e${add_default_event.event_num}sd`).value = sd.toISOString().split("T")[0];
-    document.getElementById(`e${add_default_event.event_num}ed`).value = "1900-01-01";
-    //console.log(sd.toISOString().split("T")[1].split(".")[0]);
-    //document.getElementById(`e${add_default_event.event_num}t`).value = sd.toISOString().split("T")[1].split(".")[0];
-    document.getElementById(`e${add_default_event.event_num}t`).value = String(sd.getHours()).padStart("2", "0") + ":00:00";
+    document.getElementById(`e${i}sd`).value = sd.toISOString().split("T")[0];
+    document.getElementById(`e${i}ed`).value = "";
+    document.getElementById(`e${i}t`).value = String(sd.getHours()).padStart("2", "0") + ":" + String(sd.getMinutes()).padStart("2", "0") + ":" + String(sd.getSeconds()).padStart("2", "0");
+
+    let pattern_select = document.getElementById(`e${i}p`);
+    let random_pattern_option_index = Math.floor(Math.random() * pattern_select.options.length);
+    let pattern_option = pattern_select.options[random_pattern_option_index];
+    pattern_option.selected = true;
+
+    let color_select = document.getElementById(`e${i}c`);
+
+    // want to increase the odds of getting a custom random color over getting a color from the list
+    // to do that make random_color_option_index bigger than the number of options
+    // then all random_color_option_index results that are greater than the length are set to 0 which results in a custom random color
+    let random_color_option_index = Math.floor(Math.random() * 1.5 * color_select.options.length);
+    random_color_option_index = (random_color_option_index < color_select.options.length) ? random_color_option_index : 0;
+    // never randomly select black or white (too boring)
+    random_color_option_index = (random_color_option_index > 2) ? random_color_option_index : 0;
+    let color_option = color_select.options[random_color_option_index];
+    color_option.selected = true;
+    if (random_color_option_index === 0) {
+      //let random_hex_color = Math.floor(Math.random() * 16777216).toString(16); //16777216 = 16777215 + 1 = 0xFFFFFF +1, need +1 so 0xFFFFFF included in the range
+      let random_hex_color = (Math.floor(Math.random() * (16777216 - 8947848)) + 8947848).toString(16); // RGB hex numbers as strings from #888888 to #FFFFFF
+      random_hex_color = random_hex_color.toUpperCase();
+      color_select.options[0].value = `0x00${random_hex_color}`;
+      color_select.options[0].innerHTML = `Custom (#${random_hex_color})`
+    }
+    color_select.dispatchEvent(new Event('change'));
+
+    //DEBUG: for making it easier to add test events that have both sound and voice
+    let sound_select = document.getElementById(`e${i}s`);
+    sound_select.options[1].selected = true;
   }
 
-  add_default_event.event_num++; 
+  i++
+  add_basic_event.event_num = i; 
 }
 
 
 async function load_events() {
-  //const t = await fetch(base_url+"/files/events.json");
-  //let events_json = await t.json();
-  //let events_json = JSON.parse('{"events":[{"d":"JSON boot test.","f":"d","sd":[1900,1,1],"ed":[1900,1,1],"t":[0,0,0],"e":65,"p":0,"c":"0x00FF0000","a":"en-ca&v=Clara"},{"d":"Refresh test.","f":"t","sd":[2024,1,1],"ed":[1900,1,1],"t":[0,0,0],"e":0,"p":1,"c":"0x0000FF00","a":"en-ca&v=Clara"},{"d":"This is a test notification. It is a bit long.","f":"d","e":0,"sd":[2024,9,16],"ed":[1900,1,1],"t":[17,33,59],"p":1,"c":"0x000000FF","a":"en-ca&v=Clara"}]}');
-  let events_json = JSON.parse('{"events":[{"d":"JSON boot test.","f":"d","sd":[1900,1,1],"ed":[1900,1,1],"t":[0,0,0],"e":65,"p":0,"c":"0x01000000","a":"chime.mp3"},{"d":"Refresh test.","f":"t","sd":[2024,1,1],"ed":[1900,1,1],"t":[0,0,0],"p":1,"c":"0x01000001","a":"chime.mp3"},{"d":"This is a test notification. It is a bit long.","f":"d","sd":[2024,9,16],"ed":[1900,1,1],"t":[23,13,59],"p":2,"c":"0x01000002","a":"chime.mp3"}]}');
+  let events;
+  try {
+    const response = await fetch(base_url+"/files/events.json");
+    if (!response.ok) {
+      throw new Error('Error fetching events.json');
+    }
+    let data = await response.json();
+    //console.log(data);
+    events = data["events"]
+  }
+  catch(e) {
+    console.error(e);
+  }
 
-  let events = events_json["events"];
+  //let events_json = JSON.parse('{"events":[{"d":"JSON boot test.","f":"d","sd":[1900,1,1],"ed":[1900,1,1],"t":[0,0,0],"e":65,"p":0,"c":"0x00FF0000","a":"en-ca&v=Clara"},{"d":"Refresh test.","f":"t","sd":[2024,1,1],"ed":[1900,1,1],"t":[0,0,0],"e":0,"p":1,"c":"0x0000FF00","a":"en-ca&v=Clara"},{"d":"This is a test notification. It is a bit long.","f":"d","e":0,"sd":[2024,9,16],"ed":[1900,1,1],"t":[17,33,59],"p":1,"c":"0x000000FF","a":"en-ca&v=Clara"}]}');
+  //let events_json = JSON.parse('{"events":[{"d":"JSON boot test.","f":"d","sd":[1900,1,1],"ed":[1900,1,1],"t":[0,0,0],"e":65,"p":0,"c":"0x01000000","a":"chime.mp3"},{"d":"Refresh test.","f":"t","sd":[2024,1,1],"ed":[1900,1,1],"t":[0,0,0],"p":1,"c":"0x01000001","a":"chime.mp3"},{"d":"This is a test notification. It is a bit long.","f":"d","sd":[2024,9,16],"ed":[1900,1,1],"t":[23,13,59],"p":2,"c":"0x01000002","a":"chime.mp3"}]}');
+  //let events_json = JSON.parse('{"events":[{"d":"This is a test notification. It is a bit long.","f":"d","sd":[2024,9,16],"ed":[1900,1,1],"t":[23,13,59],"p":2,"c":"0x00112233","s":"chime.mp3","v":"en-ca&v=Clara"},{"d":"Feed Fish, Morning","f":"o","sd":[2024,9,24],"ed":[1900,1,1],"t":[23,51,0],"p":2,"c":"0x00800080","s":null,"v":"en-gb&v=Harry"}]}');
+  //let events = events_json["events"];
+
   if (events) {
     for (let i = 0; i < events.length; i++) {
-      add_default_event(false);
+      add_basic_event(false);
 
       // customize events using data from events.json
 
-      document.getElementById(`e${i}d`).value = events[i]["d"];
+      let description = decodeURIComponent(events[i]["d"]);
+      document.getElementById(`e${i}d`).value = description;
       document.getElementById(`e${i}f`).value = events[i]["f"];
 
       let start_date = String(events[i]["sd"][0]) + "-" + String(events[i]["sd"][1]).padStart("2", "0") + "-" + String(events[i]["sd"][2]).padStart("2", "0");
       document.getElementById(`e${i}sd`).value = start_date;
-      let end_date = String(events[i]["ed"][0]) + "-" + String(events[i]["ed"][1]).padStart("2", "0") + "-" + String(events[i]["ed"][2]).padStart("2", "0");
-      document.getElementById(`e${i}ed`).value = end_date;
+      if (events[i]["ed"][0] != 1900 && events[i]["ed"][1] != 1 && events[i]["ed"][2] != 1) {
+        let end_date = String(events[i]["ed"][0]) + "-" + String(events[i]["ed"][1]).padStart("2", "0") + "-" + String(events[i]["ed"][2]).padStart("2", "0");
+        document.getElementById(`e${i}ed`).value = end_date;
+      }
       let time = String(events[i]["t"][0]).padStart("2", "0") + ":" + String(events[i]["t"][1]).padStart("2", "0") + ":" + String(events[i]["t"][2]).padStart("2", "0");
       document.getElementById(`e${i}t`).value = time;
 
@@ -650,26 +805,50 @@ async function load_events() {
         }
       }
 
-      // really need to query the server for a list of options instead of hard coding the patterns in the frontend
-      document.getElementById(`e${i}p`).options[parseInt(events[i]["p"])].selected = true;
-
-      let color_select = document.getElementById(`e${i}c`);
-      for (let j = 0; j < color_select.options.length; j++) {
-        let option = color_select.options[j];
-        if (option.value == events[i]["c"]) {
+      let pattern_select = document.getElementById(`e${i}p`);
+      for (let j = 0; j < pattern_select.options.length; j++) {
+        let option = pattern_select.options[j];
+        if (option.value.indexOf(events[i]["p"]) != -1) {
           option.selected = true;
-          //color_select.options.selectedIndex = j;
-          color_select.dispatchEvent(new Event('change'));
+          break;
         }
       }
 
-      // add option to enter full URL
-      // show file list so user can upload one mp3 notification sounds
-      let audio_select = document.getElementById(`e${i}a`);
-      for (let j = 0; j < audio_select.options.length; j++) {
-        let option = audio_select.options[j];
-        if (option.value.indexOf(events[i]["a"]) != -1) {
+      let event_color = events[i]["c"];
+      let color_select = document.getElementById(`e${i}c`);
+      let is_color_selected = false;
+      for (let j = 0; j < color_select.options.length; j++) {
+        let option = color_select.options[j];
+        if (option.value == event_color) {
+          is_color_selected = true;
           option.selected = true;
+          break;
+        }
+      }
+      if (!is_color_selected) {
+        if (event_color.substring(0, 4) === "0x00") {
+          color_select.options[0].value = event_color;
+          event_color = event_color.replace("0x00", "").toUpperCase();
+          color_select.options[0].innerHTML = `Custom (#${event_color})`
+        }
+      }
+      color_select.dispatchEvent(new Event('change'));
+
+      let sound_select = document.getElementById(`e${i}s`);
+      for (let j = 0; j < sound_select.options.length; j++) {
+        let option = sound_select.options[j];
+        if (option.value.indexOf(events[i]["s"]) != -1) {
+          option.selected = true;
+          break;
+        }
+      }
+
+      let voice_select = document.getElementById(`e${i}v`);
+      for (let j = 0; j < voice_select.options.length; j++) {
+        let option = voice_select.options[j];
+        if (option.value.indexOf(events[i]["v"]) != -1) {
+          option.selected = true;
+          break;
         }
       }
     }
@@ -677,21 +856,70 @@ async function load_events() {
 }
 
 async function get_timezone() {
+  let iana_tz = "UTC";
+  let is_default_tz = true;
+  //iana_tz = "bad_timezone";
+  //is_default_tz = false;
+ 
+  let message = document.createElement("div");
+
   try {
     const response = await fetch(base_url+"/get_timezone");
-    const timezone = await response.json();
-    let is_default_tz = timezone["is_default_tz"];
-    if (is_default_tz) {
-      let button_container = document.getElementById('button_container');
-      let warning = document.createTextNode("Warning: timezone is not set. All times are in UTC. Please visit configuration page to set timezone.");
-      let main_div = document.getElementById("main_div");
-      main_div.insertBefore(warning, button_container);
+    if (!response.ok) {
+      throw new Error('Error fetching get_timezone');
     }
+    let data = await response.json();
+    //console.log(data);
+    iana_tz = data["iana_tz"];
+    is_default_tz = data["is_default_tz"];
+  
+    timezone_API_URL += iana_tz;
+    //timezone_API_URL += "ip"; // geolocate IP address to determine timezone
   }
   catch(e) {
     console.error(e);
   }
+
+
+  if (is_default_tz) {
+    message.innerHTML = "<b style='color:red'>Warning: timezone is not set. All times are in UTC. Please visit configuration page to set timezone.</b>";
+  }
+
+  if (iana_tz) {
+    try {
+      const response = await fetch(timezone_API_URL);
+      if (!(response.ok || response.status == 404)) {
+        throw new Error('Error fetching date and time info');
+      }
+
+      let data = await response.json();
+      //console.log(data);
+      if (data.hasOwnProperty("datetime") && data.hasOwnProperty("timezone")) {
+        if (message.innerHTML != "") {
+          message.innerHTML += "<br>";
+        }
+        message.innerHTML += `Local date and time at page load: ${data["datetime"].split(".")[0].replace("T", "  ")} ${data["timezone"]}`;
+      }
+      else {
+        let api_error_message = "";
+        if (data.hasOwnProperty("error")) {
+          api_error_message = data["error"];
+          api_error_message = api_error_message.charAt(0).toUpperCase() + api_error_message.slice(1);
+        }
+        message.innerHTML = `<b style='color:red'>Error: Could not get time. ${api_error_message}</b>`;
+      }
+    }
+    catch(e) {
+      console.error(e);
+    }
+
+  }
+
+  let button_container = document.getElementById("button_container");
+  let main_div = document.getElementById("main_div");
+  main_div.insertBefore(message, button_container);
 }
+
 
 async function run() {
   //let response = await fetch("http://worldtimeapi.org/api/ip");
@@ -705,20 +933,32 @@ async function run() {
   await get_timezone();
   await create_event_html_template();
   let events_container = document.getElementById("events_container");
-  let add_event_button = `<input id="btn_add_event" type="button" value="+" onclick=add_default_event(true) />`;
-  events_container.insertAdjacentHTML("beforeend", add_event_button);
+  let add_event_buttons_div = document.createElement("div");
+  add_event_buttons_div.id = "add_event_buttons_div";
+
+  let add_event_buttons = ""; // starting with empty string makes it easier to add remove more buttons during development
+  add_event_buttons += `<input type="button" value="+15s"   onclick="add_basic_event(true, 15000)" />`;
+  add_event_buttons += `<input type="button" value="+30s"   onclick="add_basic_event(true, 30000)" />`;
+  add_event_buttons += `<input type="button" value="+10m"  onclick="add_basic_event(true, 600000)" />`;
+  add_event_buttons += `<input type="button" value="+30m" onclick="add_basic_event(true, 1800000)" />`;
+  add_event_buttons += `<input type="button" value="+1h"  onclick="add_basic_event(true, 3600000)" />`;
+  add_event_buttons += `<input type="button" value="+1d" onclick="add_basic_event(true, 82400000)" />`; // what happens if a day has more than 24 hours, (i.e. fall back, DST ends)
+  add_event_buttons_div.innerHTML = add_event_buttons;
+  events_container.append(add_event_buttons_div);
   load_events();
 }
 
-// trigger onchange for dynamic color radio so previous or default selection takes effect
-let els = document.querySelectorAll('input[type="radio"][data-key="ct"]');
-for (el of els) {
-  el.dispatchEvent(new Event("change"));
+function quick_add_event(e) {
+  if (e.ctrlKey && e.code === 'ArrowDown') {
+    add_basic_event(true, 30000);
+  }
 }
 
 window.addEventListener("load", run);
 
-</script>
+window.addEventListener("keyup", quick_add_event);
+
+  </script>
 
 </body>
 </html>

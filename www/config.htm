@@ -132,126 +132,194 @@
     <label>.local</label>
 
     <label class="item-a">IANA Timezone</label>
-    <input id="iana_tz" class="wide-input" form="save_config" placeholder="type IANA timezone here" name="iana_tz" onchange="handle_iana_tz_change(false)" autocomplete="off">
+    <input id="iana_tz" class="wide-input" form="save_config" placeholder="enter IANA timezone here" name="iana_tz" onchange="handle_iana_tz_change(false)" autocomplete="off">
 
     <label class="item-a">POSIX Timezone</label>
-    <input id="posix_tz" class="wide-input" form="save_config" placeholder="type POSIX timezone here" name="posix_tz" autocomplete="off">
+    <input id="posix_tz" class="wide-input" form="save_config" placeholder="enter POSIX timezone here" name="posix_tz" autocomplete="off">
 
     <label class="item-a">VoiceRSS API Key</label>
-    <input id="tts_api_key" class="wide-input" form="save_config" placeholder="type API key for VoiceRSS here" name="tts_api_key" maxlength="32" autocomplete="off">
+    <input id="tts_api_key" class="wide-input" form="save_config" placeholder="enter API key for VoiceRSS here" name="tts_api_key" maxlength="32" autocomplete="off">
+
+    <label class="item-a">Default Voice</label>
+    <!--input id="tts_default_voice" class="wide-input" form="save_config" placeholder="enter default VoiceRSS voice name here" name="tts_default_voice" maxlength="32" autocomplete="off"-->
+    <select id="tts_default_voice" class="wide-input" form="save_config" name="tts_default_voice" autocomplete="off"></select>
+
     <button form="save_config" type="submit" value="Save">Save</button>
   </div>
 
   <script>
-    base_url = "";
-    if (window.location.protocol == "file:") {
-      // makes for easier debugging.
-      // if html is loaded locally, can see the results of editing more easily.
-      // otherwise every change to html would require uploading new version to microcontroller.
-      base_url = "http://smartbutton.local";
-    }
+base_url = "";
+if (window.location.protocol == "file:") {
+  // makes for easier debugging.
+  // if html is loaded locally, can see the results of editing more easily.
+  // otherwise every change to html would require uploading new version to microcontroller.
+  base_url = "http://smartbutton.local";
+}
 
-    async function handle_iana_tz_change(fetch_iana) {
-      // for the time.h functions to work correctly (and automatically) with DST we must set TZ with the proper POSIX timezone string.
-      // unfortunately APIs that return a POSIX timezone string are extremely rare.
-      // the service (timezoned.rop.nl from the ezTime library) we use requires an IANA timezone to return the POSIX timezone.
-      // this service does have the ability to geolocate IP addresses, but it only works for countries with one timezone.
-      // therefore we use a separate service to get our IANA timezone by geolocating our IP address.
-      // all of this could be done behind the scenes without exposing IANA and POSIX timezone inputs to the user; however geolocating
-      // IP addresses is not 100% reliable, so we need to give the user the option to manually enter data in these fields.
-      let iana_tz = document.getElementById("iana_tz").value;
-      if (fetch_iana || iana_tz === "") {
-        try {
-          const response = await fetch("http://worldtimeapi.org/api/ip"); // returns local time based on location of IP address
-          const datetime_json = await response.json();
-          iana_tz = datetime_json["timezone"];
-          document.getElementById("iana_tz").value = iana_tz;
+async function handle_iana_tz_change(fetch_iana) {
+  // for the time.h functions to work correctly (and automatically) with DST we must set TZ with the proper POSIX timezone string.
+  // unfortunately APIs that return a POSIX timezone string are extremely rare.
+  // the service (timezoned.rop.nl from the ezTime library) we use requires an IANA timezone to return the POSIX timezone.
+  // this service does have the ability to geolocate IP addresses, but it only works for countries with one timezone.
+  // therefore we use a separate service to get our IANA timezone by geolocating our IP address.
+  // all of this could be done behind the scenes without exposing IANA and POSIX timezone inputs to the user; however geolocating
+  // IP addresses is not 100% reliable, so we need to give the user the option to manually enter data in these fields.
+  let iana_tz = document.getElementById("iana_tz").value;
+  if (fetch_iana || iana_tz === "") {
+    try {
+      const response = await fetch("http://worldtimeapi.org/api/ip"); // returns local time based on location of IP address
+      const datetime_json = await response.json();
+      iana_tz = datetime_json["timezone"];
+      document.getElementById("iana_tz").value = iana_tz;
+    }
+    catch(e) {
+      console.error(e);
+    }
+  }
+
+  if (iana_tz != "") {
+    let success = false;
+    try {
+      const response = await fetch(base_url+"/verify_timezone", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: "iana_tz=" + iana_tz
+      });
+      // TODO: need to check response code, might not be 200 !!!
+      success = true;
+    }
+    catch(e) {
+      console.error(e);
+      success = false;
+    }
+    if (success) {
+      setTimeout(get_timezone, 2000);
+    }
+  }
+}
+
+async function get_timezone() {
+  let is_default_tz = true;
+  try {
+    const response = await fetch(base_url+"/get_timezone");
+    const timezone = await response.json();
+    console.log(timezone);
+    is_default_tz = timezone["is_default_tz"];
+    let iana_tz = timezone["iana_tz"];
+    let posix_tz = timezone["posix_tz"];
+
+    let el_iana_tz = document.getElementById("iana_tz");
+    el_iana_tz.value = iana_tz;
+    document.getElementById("posix_tz").value = posix_tz;
+  }
+  catch(e) {
+    console.error(e);
+  }
+  return is_default_tz;
+}
+
+async function create_voice_options() {
+  let voice_options_html = `
+    <option value="null">No speech</option>`;
+  let default_voice = "";
+
+  await fetch(base_url+"/get_default_voice").then((response) => {
+    if (response.ok) {
+      return response.json();
+    }
+    throw new Error('Error fetching default voice');
+  })
+  .then((json) => {
+    default_voice = json["tts_default_voice"];
+  })
+  .catch((error) => {
+    console.log(error)
+  });
+
+  await fetch(base_url+"/voicerss.json").then((response) => {
+    if (response.ok) {
+      return response.json();
+    }
+    throw new Error('Error fetching voicerss.json');
+  })
+  .then((json) => {
+    let optgroups = json["og"];
+    if (optgroups) {
+        voice_options_html += `
+  <optgroup id="v" label="Voices">`;
+      for (let i = 0; i < optgroups.length; i++) {
+        let optgroup = optgroups[i];
+        voice_options_html += `
+    <optgroup label="&nbsp;&nbsp;${optgroup['l']}">`;
+        let options = optgroup['o'];
+        for (let j = 0; j < options.length; j++) {
+          let option = options[j];
+          if (option['t'] === default_voice) {
+            voice_options_html += `
+      <option value="${option['t']}" selected="selected">&nbsp;&nbsp;${option['t']}</option>`;
+          }
+          else {
+            voice_options_html += `
+      <option value="${option['t']}">&nbsp;&nbsp;${option['t']}</option>`;
+          }
         }
-        catch(e) {
-          console.error(e);
-        }
+        voice_options_html += `
+    </optgroup>`;
       }
-
-      if (iana_tz != "") {
-        let success = false;
-        try {
-          const response = await fetch(base_url+"/verify_timezone", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/x-www-form-urlencoded"
-            },
-            body: "iana_tz=" + iana_tz
-          });
-          // TODO: need to check response code, might not be 200 !!!
-          success = true;
-        }
-        catch(e) {
-          console.error(e);
-          success = false;
-        }
-        if (success) {
-          setTimeout(get_timezone, 2000);
-        }
-      }
+        voice_options_html += `
+  </optgroup>`;
     }
+  })
+  .catch((error) => {
+    console.log(error)
+  });
 
-    async function get_timezone() {
-      let is_default_tz = true;
-      try {
-        const response = await fetch(base_url+"/get_timezone");
-        const timezone = await response.json();
-        console.log(timezone);
-        is_default_tz = timezone["is_default_tz"];
-        let iana_tz = timezone["iana_tz"];
-        let posix_tz = timezone["posix_tz"];
+  document.getElementById("tts_default_voice").innerHTML = voice_options_html;
+}
 
-        let el_iana_tz = document.getElementById("iana_tz");
-        el_iana_tz.value = iana_tz;
-        document.getElementById("posix_tz").value = posix_tz;
-      }
-      catch(e) {
-        console.error(e);
-      }
-      return is_default_tz;
-    }
+function sp() {
+  let pf = document.getElementById("password");
+  if (pf.type === "password") {
+    pf.type = "text";
+    document.getElementById("pwd_hidden").style.display = "block";
+    document.getElementById("pwd_visible").style.display = "none";
+  }
+  else {
+    pf.type = "password";
+    document.getElementById("pwd_visible").style.display = "block";
+    document.getElementById("pwd_hidden").style.display = "none";
+  }
+}
 
-    function sp() {
-      let pf = document.getElementById("password");
-      if (pf.type === "password") {
-        pf.type = "text";
-        document.getElementById("pwd_hidden").style.display = "block";
-        document.getElementById("pwd_visible").style.display = "none";
-      }
-      else {
-        pf.type = "password";
-        document.getElementById("pwd_visible").style.display = "block";
-        document.getElementById("pwd_hidden").style.display = "none";
-      }
-    }
+async function get_config() {
+  try {
+    const response = await fetch(base_url+"/get_config");
+    const config = await response.json();
+    console.log(config);
+    document.getElementById("ssid").value = config["ssid"];
+    document.getElementById("mdns_host").value = config["mdns_host"];
+    document.getElementById("tts_api_key").value = config["tts_api_key"];
+    //document.getElementById("tts_default_voice").value = config["tts_default_voice"];
+  }
+  catch(e) {
+    console.error(e);
+  }
+}
 
-    async function get_config() {
-      try {
-        const response = await fetch(base_url+"/get_config");
-        const config = await response.json();
-        console.log(config);
-        document.getElementById("ssid").value = config["ssid"];
-        document.getElementById("mdns_host").value = config["mdns_host"];
-        document.getElementById("tts_api_key").value = config["tts_api_key"];
-      }
-      catch(e) {
-        console.error(e);
-      }
-    }
+async function run() {
+  get_config(); 
 
-    function run() {
-      get_config(); 
-      let is_default_tz = get_timezone();
-      if (is_default_tz) {
-        handle_iana_tz_change(true);
-      }
-    }
+  create_voice_options();
 
-    window.addEventListener("load", run);
+  let is_default_tz = get_timezone();
+  if (is_default_tz) {
+    handle_iana_tz_change(true);
+  }
+}
+
+window.addEventListener("load", run);
   </script>
 </body>
 </html>
