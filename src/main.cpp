@@ -1,16 +1,19 @@
 // events.json specification
-// d == description (max 100 chars), f == frequency, sd == start date, ed == end date, t == time, e == exclude, p == pattern, c == color, s == sound, v == voice
+// d == description (max 100 chars), f == frequency, sd == start date, st == start time, ed == end date, et == end time, e == exclude, p == pattern, c == color, s == sound, v == voice
 // frequency: d == Daily, w == weekly, m == Monthly, y == Yearly
 // exclude: is an 8 bit number that stores the sum of the days of the week you wish to skip
 //          1 for Sunday, 2 for Monday, 4 for Tuesday, 8 for Wednesday, 16 for Thursday, 32 for Friday, 64 for Saturday
 //          for example, if you wish to exclude Saturday and Sunday, then set exclude to 1 + 64 => e:65
 //
 //{"events":[
-//           {"d":"Feed Fish, Morning","f":"d","sd":[2024,9,25],"ed":[1900,1,1],"t":[20,0,0],"e":65,"p":2,"c":"0x00FF0000","s":"chime.mp3","v":"en-ca&v=Clara"},
-//           {"d":"Feed Fish, Afternoon","f":"d","sd":[2024,9,25],"ed":[1900,1,1],"t":[16,0,0],"e":65,"p":0,"c":"0x000000FF","s":"chime.mp3","v":"en-ca&v=Clara"}
+//           {"d":"Feed+Fish%2C+Morning","f":"d","sd":[2024,9,25],"st":[8,0,0],"ed":null,"et":null,"e":65,"p":2,"c":"0x00FF0000","s":"chime.mp3","v":"en-ca&v=Clara"},
+//           {"d":"Feed+Fish%2C+Afternoon","f":"d","sd":[2024,9,25],"st":[16,0,0],"ed":null,"et":null,"e":65,"p":0,"c":"0x000000FF","s":"chime.mp3","v":"en-ca&v=Clara"}
 //          ]
 //}
-//}
+//
+// descriptions are percent encoded by the frontend and stored in this format so they can be easily passed to the TTS API.
+// the backend trusts that the frontend gives it valid, preformatted data.
+// generally, not the best idea, but this is just a personal project and not implement formatting like percent encoding in the backend simplifies the code.
 
 
 #include <Arduino.h>
@@ -52,15 +55,15 @@
 #define NUM_LEDS 15
 #define COLOR_ORDER GRB
 #define LED_STRIP_VOLTAGE 5
-#define LED_STRIP_MILLIAMPS 100
+#define LED_STRIP_MILLIAMPS 270
 #define HOMOGENIZE_BRIGHTNESS true
 
 #define BUTTON_PIN 26 
 
 #define EVENT_CHECK_INTERVAL 5000 // milliseconds. how frequently checks for events happening now should occur.
 
-#define DESCRIPTION_SIZE 301 // frontend allows up to 100 but with percent encoding the description could become 300 characters long, worst case.
-#define SOUND_SIZE 15
+#define DESCRIPTION_SIZE 301 // frontend allows up to 100 but with percent encoding the description could become much longer.
+#define SOUND_SIZE 101
 #define VOICE_SIZE 15 // longest voice string for voicerss: fr-ca&v=Olivia
 
 #undef DEBUG_CONSOLE
@@ -103,20 +106,21 @@ bool restart_needed = false;
 CRGB leds[NUM_LEDS];
 uint8_t homogenized_brightness = 255;
 
+bool is_audio_message_queued = false;
 Button2 button;
 
 struct Event {
   uint32_t id;
   struct tm datetime;
   char frequency;
+  struct tm end_datetime;
   char description[DESCRIPTION_SIZE];
   uint8_t exclude;
   uint8_t pattern;
   uint32_t color;
   char sound[SOUND_SIZE];
   char voice[VOICE_SIZE];
-  uint8_t timestamp;
-  bool do_long_notify;
+  time_t timestamp;
 };
 
 std::vector<Event> events;
@@ -125,10 +129,10 @@ bool events_reload_needed = false;
 
 struct AudioMessage {
   uint32_t id;
-  struct tm datetime;
   char description[DESCRIPTION_SIZE];
   char sound[SOUND_SIZE];
   char voice[VOICE_SIZE];
+  time_t timestamp;
   bool do_long_notify;
 };
 
@@ -167,12 +171,14 @@ void visual_notifier();
 
 void status_callback(void *cbData, int code, const char *string);
 void play(AudioFileSource* file);
-void tell(struct tm datetime, const char* description, const char* voice, bool do_long_notify);
+void tell(const char* description, const char* voice, time_t timestamp, bool do_long_notify);
 void sound(String filename);
 void aural_notifier(void* parameter);
 
+void fill_in_datetime(tm* datetime);
 tm refresh_datetime(tm datetime, char frequency);
 bool load_events_file();
+bool save_file(String fs_path, String json, String* message);
 void check_for_recent_events(uint16_t interval);
 
 void single_click_handler(Button2& b);
@@ -306,7 +312,14 @@ uint16_t backwards(uint16_t index) {
 }
 
 void spin(uint16_t draw_interval, uint16_t(*dfp)(uint16_t)) {
+  // count was an experiment to try to fix the disjoint in the animation cause by the USB hole
+  //static uint16_t count = 0;
   if (finished_waiting(draw_interval)) {
+    //if (count == NUM_LEDS) {
+    //  count = 0;
+    //  return;
+    //}
+    //count++;
     CRGB color0 = leds[(*dfp)(NUM_LEDS-1)]; 
     for(uint16_t i = NUM_LEDS-1; i > 0; i--) {
       leds[(*dfp)(i)] = leds[(*dfp)(i-1)];
@@ -415,11 +428,12 @@ void visual_reset() {
   or_pos = NUM_LEDS;
   or_loop_num = 0;
   finished_waiting(0); // effectively resets timer used for visual effects
+  FastLED.clear();
 }
 
 
 void visual_notifier() {
-  static uint8_t i = 0;
+  static uint16_t i = 0;
   static uint32_t pm = 0;
   static uint32_t last_id_seen = 0;
   static bool refill = true;
@@ -437,23 +451,24 @@ void visual_notifier() {
       }
 
       uint8_t pattern = event.pattern;
+      uint8_t randomness = (uint8_t)event.timestamp;
       if (pattern == 255) {
         // 255 indicates a random pattern should be used
-        pattern = event.timestamp % patterns.size();
+        pattern = randomness % patterns.size();
       }
       uint32_t color = event.color;
       if (color == 0xFFFFFFFF) {
         // 0xFFFFFFFF indicates a random color should be used
-        bool do_basic = event.timestamp % 3;
+        bool do_basic = randomness % 3;
 
         if (do_basic) {
-          //color = (uint32_t)((CRGB)CHSV((event.timestamp % 255), 255, 255)) & 0x00FFFFFF;
-          color = (uint32_t)(CRGB)CHSV((event.timestamp % 255), 255, 255);
+          //color = (uint32_t)((CRGB)CHSV((randomness % 255), 255, 255)) & 0x00FFFFFF;
+          color = (uint32_t)(CRGB)CHSV((randomness % 255), 255, 255);
           color &= 0x00FFFFFF; // make sure the upper bits are zero to indicate a basic color
         }
         else {
           // do special color
-          color = 0x01000000 + (event.timestamp % special_colors.size());
+          color = 0x01000000 + (randomness % special_colors.size());
         }
       }
 
@@ -464,7 +479,7 @@ void visual_notifier() {
       //  Serial.print("pattern: ");
       //  Serial.println(pattern);
 
-      //  CRGB tmpcolor = CHSV((event.timestamp % 255), 255, 255);
+      //  CRGB tmpcolor = CHSV((randomness % 255), 255, 255);
       //  Serial.println((uint32_t)tmpcolor, HEX);
       //  Serial.print("color: ");
       //  char hex_color[11];
@@ -501,7 +516,8 @@ void visual_notifier() {
             refill = false;
             if (color <= 0x00FFFFFF) {
               CRGB color_dim = color;
-              color_dim.nscale8(160); // lower numbers are closer to black
+              //color_dim.nscale8(160); // lower numbers are closer to black
+              color_dim.nscale8(80); // lower numbers are closer to black
               fill_gradient_RGB(leds, NUM_LEDS, color, color_dim);
             }
             else {
@@ -528,6 +544,18 @@ void visual_notifier() {
   show();
 }
 
+// Called when there's a warning or error (like a buffer underflow or decode hiccup)
+//void StatusCallback(void *cbData, int code, const char *string)
+//{
+//  const char *ptr = reinterpret_cast<const char *>(cbData);
+//  // Note that the string may be in PROGMEM, so copy it to RAM for printf
+//  char s1[64];
+//  strncpy_P(s1, string, sizeof(s1));
+//  s1[sizeof(s1)-1]=0;
+//  Serial.printf("STATUS(%s) '%d' = '%s'\n", ptr, code, s1);
+//  Serial.flush();
+//}
+
 //https://github.com/earlephilhower/ESP8266Audio/issues/406
 
 //AudioOutputI2S *audio_out = new AudioOutputI2S();
@@ -536,6 +564,8 @@ AudioGeneratorMP3 *mp3 = new AudioGeneratorMP3();
 void play(AudioFileSource* file) {
   AudioFileSourceBuffer *buff;
   buff = new AudioFileSourceBuffer(file, 2048);
+  //buff->RegisterStatusCB(StatusCallback, (void*)"buffer");
+  //mp3->RegisterStatusCB(StatusCallback, (void*)"mp3");
 
   // this was an attempt to read the first few bytes of the file and using them to determine if it is an mp3
   // however this results in a bit of the beginning of the file not being played
@@ -545,15 +575,14 @@ void play(AudioFileSource* file) {
   //uint8_t magic_numbers[magic_numbers_len];
   //buff->read(magic_numbers, magic_numbers_len);
   //buff->seek(-3, SEEK_CUR);
-
   // limited observation of making bad requests shows ESP8266Audio thinks the file size of a bad request is very large.
   // only looked at bad requests to voicerss.org
   // if the validity of the mp3 is not checked ESP8266Audio can get stuck in loop() causing a watchdog timer reboot.
   //if (file->getSize() > 100000 || !((magic_numbers[0] == 0x49 && magic_numbers[1] == 0x44 && magic_numbers[2] == 0x33) || (magic_numbers[0] == 0xFF && magic_numbers[1] == 0xFB)) ) {
-  if (file->getSize() > 100000) {
-    Serial.println("Invalid MP3.");
-    return;
-  }
+  //if (file->getSize() > 100000) {
+  //  Serial.println("Invalid MP3.");
+  //  return;
+  //}
 
   mp3->begin(buff, audio_out);
 
@@ -582,7 +611,7 @@ void play(AudioFileSource* file) {
 
 
 AudioFileSourceHTTPStream *http_mp3_file = new AudioFileSourceHTTPStream();
-void tell(struct tm datetime, const char* description, const char* voice, bool do_long_notify) {
+void tell(const char* description, const char* voice, time_t timestamp, bool do_long_notify) {
   preferences.begin("config", true);
   String tts_api_key = preferences.getString("tts_api_key", ""); 
   preferences.end();
@@ -607,12 +636,27 @@ void tell(struct tm datetime, const char* description, const char* voice, bool d
     snprintf(url, url_buffsize, "http://api.voicerss.org/?key=%s&hl=%s&r=-2&c=MP3&f=24khz_8bit_mono&src=%s", tts_api_key.c_str(), voice, description);
   }
   else {
-    url_buffsize += 43 + 2 + 2 + 2;
+    struct tm event_time = {0};
+    localtime_r(&timestamp, &event_time);
+    const char* hunit = "hours";
+    const char* munit = "minutes";
+    const char* sunit = "seconds";
+    if (event_time.tm_hour == 1) {
+      hunit = "hour";
+    }
+    if (event_time.tm_min == 1) {
+      munit = "minute";
+    }
+    if (event_time.tm_sec == 1) {
+      sunit = "second";
+    }
+
+    url_buffsize += 24 + strlen(hunit) + strlen(munit) + strlen(sunit) + 2 + 2 + 2;
     url = (char *)malloc(url_buffsize);
     if (url == NULL) {
       return;
     }
-    snprintf(url, url_buffsize, "http://api.voicerss.org/?key=%s&hl=%s&r=-2&c=MP3&f=24khz_8bit_mono&src=%s+occurred+at+%i+hours,+%i+minutes,+and+%i+seconds", tts_api_key.c_str(), voice, description, datetime.tm_hour, datetime.tm_min, datetime.tm_sec);
+    snprintf(url, url_buffsize, "http://api.voicerss.org/?key=%s&hl=%s&r=-2&c=MP3&f=24khz_8bit_mono&src=%s+occurred+at+%i+%s,+%i+%s,+and+%i+%s", tts_api_key.c_str(), voice, description, event_time.tm_hour, hunit, event_time.tm_min, munit, event_time.tm_sec, sunit);
   }
 
   Serial.println(url);
@@ -640,22 +684,43 @@ void sound(const char* filename) {
 }
 
 
+void http_sound(const char* url) {
+  Serial.print("http_sound(): ");
+  Serial.println(url);
+  http_mp3_file->open(url);
+  play(http_mp3_file);
+  http_mp3_file->close();
+}
+
+
 void aural_notifier(void* parameter) {
   static uint16_t i = 0;
   for (;;) {
     vTaskDelay(pdMS_TO_TICKS(5));
+    //continue;
     struct AudioMessage am;
     if (xQueueReceive(qaudio_messages, (void *)&am, 0) == pdTRUE) {
-      if (strlen(am.sound) > 0 && strncmp(am.sound, "null", SOUND_SIZE*sizeof(char)) != 0) {
-        sound(am.sound);
+      is_audio_message_queued = true;
+      //if (strlen(am.sound) > 0 && strncmp(am.sound, "null", SOUND_SIZE*sizeof(char)) != 0) {
+      if (strlen(am.sound) > 0) {
+        const char* http_sound_prefix = "http://";
+        if (strncmp(am.sound, http_sound_prefix, strlen(http_sound_prefix)*sizeof(char)) == 0) {
+          http_sound(am.sound);
+        }
+        else {
+          sound(am.sound);
+        }
         vTaskDelay(pdMS_TO_TICKS(750));
       }
 
-      if (strlen(am.voice) > 0 && strncmp(am.voice, "null", VOICE_SIZE*sizeof(char)) != 0) {
-        tell(am.datetime, am.description, am.voice, am.do_long_notify);
+      if (strlen(am.description) > 0 && strlen(am.voice) > 0) {
+        tell(am.description, am.voice, am.timestamp, am.do_long_notify);
         vTaskDelay(pdMS_TO_TICKS(750));
       }
 
+    }
+    else {
+      is_audio_message_queued = false;
     }
   }
   vTaskDelete(NULL);
@@ -774,10 +839,13 @@ bool create_special_colors_list(void) {
   return finished;
 }
 
+void fill_in_datetime(tm* _datetime) {
+  time_t t = mktime(_datetime);
+  localtime_r(&t, _datetime); // tm_wday, tm_yday, and tm_isdst are filled in with the proper values
+}
+
+// updates recurring events, so the next occurrence is in the future.
 tm refresh_datetime(tm datetime, char frequency) {
-  // refresh_datetime() will update recurring events, so the next occurrence is in the future.
-  // refresh_datetime() will also fill in fields for an incompletely specified event even if the event is not in the past.
-  //   --improperly set or missing data in tm_wday and tm_yday will be corrected. the proper DST info will be filled in when tm_isdst is -1
   struct tm local_now = {0};
   struct tm next_event = {0};
   time_t now;
@@ -803,6 +871,11 @@ tm refresh_datetime(tm datetime, char frequency) {
     // tm_wday and tm_yday are not set because mktime() always ignores them.
     next_event.tm_isdst = -1;
 
+    
+    next_event.tm_mday = datetime.tm_mday;
+    next_event.tm_mon = datetime.tm_mon;
+    next_event.tm_year = datetime.tm_year;
+
     if (frequency == 'o') { // once, one-shot
       // the code that detects if an event is happening now allows a window of time an event can
       // be close to. this helps prevent missed events, but it can also lead to the event
@@ -810,13 +883,27 @@ tm refresh_datetime(tm datetime, char frequency) {
       // to prevent multiple detections reoccuring events are moved to their next datetime in the
       // future. however one-shot events do not have a future. therefore we want to change the
       // datetime to the far past to move the event a way from the *happening now* detection window.
+
       next_event.tm_sec = 0;
       next_event.tm_min = 0;
       next_event.tm_hour = 0;
-      next_event.tm_mday = 0;
+      next_event.tm_mday = 1;
       next_event.tm_mon = 0;
-      next_event.tm_year = 0;
+      next_event.tm_year = 70;
+
     }
+    //else if (frequency == 'd') { // debug testing
+    //  next_event.tm_mday = local_now.tm_mday;
+    //  next_event.tm_mon = local_now.tm_mon;
+    //  next_event.tm_year = local_now.tm_year;
+    //  t2 = mktime(&next_event);
+    //  if (t2 <= tnow) {
+    //    //next_event.tm_mday += 1;
+    //    next_event.tm_sec = local_now.tm_sec;
+    //    next_event.tm_min = local_now.tm_min + 2;
+    //    next_event.tm_hour = local_now.tm_hour;
+    //  }
+    //}
     else if (frequency == 'd') { // daily
       next_event.tm_mday = local_now.tm_mday;
       next_event.tm_mon = local_now.tm_mon;
@@ -872,13 +959,51 @@ tm refresh_datetime(tm datetime, char frequency) {
     }
   }
 
-  if (frequency != 'o') {
-    // 1900-01-01 gets converted to a date in 2036 so do not do mktime() for events that only happen once.
+  t2 = mktime(&next_event);
+  if (t2 <= tnow) {
+    // if still in the past set it to the Unix Epoch to make it clear the event no longer occurs
+    //next_event.tm_sec = 0;
+    //next_event.tm_min = 0;
+    //next_event.tm_hour = 0;
+    //next_event.tm_mday = 1;
+    //next_event.tm_mon = 0;
+    //next_event.tm_year = 70;
+    //next_event.tm_isdst = 0; // no DST. necessary for mktime() to give the exact Unix Epoch
+
+    // no DST. necessary for mktime() to give the exact Unix Epoch
+    next_event = {.tm_sec = 0, .tm_min = 0, .tm_hour = 0, .tm_mday = 1, .tm_mon = 0, .tm_year = 70, .tm_wday = 4, .tm_yday = 0, .tm_isdst = 0};
     t2 = mktime(&next_event);
-    localtime_r(&t2, &next_event); // tm_wday, tm_yday, and tm_isdst are filled in with the proper values
+  }
+  localtime_r(&t2, &next_event); // tm_wday, tm_yday, and tm_isdst are filled in with the proper values
+  return next_event;
+}
+
+bool is_expired(tm datetime, tm end_datetime) {
+  struct tm local_now = {0};
+  time_t now;
+  time(&now);
+  localtime_r(&now, &local_now);
+  
+  datetime.tm_isdst = -1; // A negative value of tm_isdst causes mktime to attempt to determine if Daylight Saving Time was in effect in the specified time. 
+  end_datetime.tm_isdst = -1;
+
+  time_t tnow = mktime(&local_now);
+  time_t tdt = mktime(&datetime);
+  time_t tend = mktime(&end_datetime);
+
+  if (tdt <= tnow) {
+    Serial.println("expired: in past");
+    return true;
   }
 
-  return next_event;
+  if (tdt >= tend && !(end_datetime.tm_year == 70 && end_datetime.tm_mon == 0 && end_datetime.tm_mday == 1)) {
+    if (tdt >= tend) {
+      Serial.println("expired: after end date");
+      return true;
+    }
+  }
+
+  return false;
 }
 
 
@@ -910,25 +1035,12 @@ bool load_events_file() {
     return true;
   }
 
-  uint8_t id = 0;
-  for (uint8_t i = 0; i < jevents.size(); i++) {
+  uint16_t id = 0;
+  for (uint16_t i = 0; i < jevents.size(); i++) {
     JsonObject jevent = jevents[i];
-    uint8_t exclude = jevent[F("e")].as<uint8_t>();
-    const char* description = jevent[F("d")];
-    // neither of these work: //char frequency = event[F("f")].as<char>(); //char frequency = event[F("f")][0];
-    const char* fs = jevent[F("f")];
-    char frequency = fs[0];
     JsonArray start_date = jevent[F("sd")];
-    JsonArray event_time = jevent[F("t")];
-    JsonVariant pattern = jevent[F("p")];
-    uint32_t color = std::stoul(jevent[F("c")].as<std::string>(), nullptr, 16);
-    const char* sound = jevent[F("s")];
-    const char* voice = jevent[F("v")];
-    // TODO: how much validation do we need to do here?
+    JsonArray event_time = jevent[F("st")];
     if (!start_date.isNull() && start_date.size() == 3 && !event_time.isNull() && event_time.size() == 3) {
-      Serial.print("description: ");
-      Serial.println(description);
-
       struct tm datetime = {0};
       datetime.tm_year = (start_date[0].as<uint16_t>()) - 1900; // entire year is stored in json file to make it more human readable.
       datetime.tm_mon = (start_date[1].as<uint8_t>()) - 1; // time library has January as 0, but json file represents January with 1 to make it more human readable.
@@ -938,14 +1050,92 @@ bool load_events_file() {
       datetime.tm_sec = event_time[2].as<uint8_t>();
       datetime.tm_isdst = -1;
 
+      // refresh_datetime() uses tm_wday so it needs to corrected before we pass datetime to refresh_datetime()
+      fill_in_datetime(&datetime); // tm_wday, tm_yday, and tm_isdst are filled in with the proper values
+
+      // refresh_datetime() uses tm_wday so it needs to corrected before we pass datetime to refresh_datetime()
+      //time_t t = mktime(&datetime);
+      //localtime_r(&t, &datetime); // tm_wday, tm_yday, and tm_isdst are filled in with the proper values
+
+      char frequency = 'o';
+      if (!jevent[F("f")].isNull()) {
+        frequency = jevent[F("f")].as<const char*>()[0];
+      }
+
+      int8_t num_occurences = 0;
+      if (!jevent[F("o")].isNull()) {
+        num_occurences = jevent[F("o")].as<int8_t>();
+      }
+
+      const char* description = "";
+      if (!jevent[F("d")].isNull()) {
+        description = jevent[F("d")];
+      }
+      Serial.print("description: ");
+      Serial.println(description);
+
       Serial.print("original datetime: ");
       Serial.print(asctime(&datetime));
+      datetime = refresh_datetime(datetime, frequency);
+      Serial.print("refreshed datetime: ");
+      Serial.print(asctime(&datetime));
 
-      //struct Event event = {next_available_event_id++, refresh_datetime(datetime, frequency), frequency, "", exclude, pattern, color, "", "", 0, false};
+      struct tm end_datetime = {.tm_sec = 0, .tm_min = 0, .tm_hour = 0, .tm_mday = 1, .tm_mon = 0, .tm_year = 70, .tm_wday = 4, .tm_yday = 0, .tm_isdst = -1};
+      JsonArray end_date = jevent[F("ed")];
+      if (!end_date.isNull() && end_date.size() == 3) {
+        end_datetime.tm_year = (end_date[0].as<uint16_t>()) - 1900;
+        end_datetime.tm_mon = (end_date[1].as<uint8_t>()) - 1;
+        end_datetime.tm_mday = end_date[2].as<uint8_t>();
+      }
+      JsonArray end_time = jevent[F("et")];
+      if (!end_time.isNull() && end_date.size() == 3) {
+        end_datetime.tm_hour = end_time[0].as<uint8_t>();
+        end_datetime.tm_min = end_time[1].as<uint8_t>();
+        end_datetime.tm_sec = end_time[2].as<uint8_t>();
+        end_datetime.tm_isdst = -1;
+      }
+
+      if (is_expired(datetime, end_datetime)) {
+        continue;
+      }
+
+
+      uint8_t exclude = 0;
+      if (!jevent[F("e")].isNull()) {
+        exclude = jevent[F("e")].as<uint8_t>();
+        Serial.print("exclude: ");
+        Serial.println(exclude);
+      }
+
+      uint8_t pattern = 0;
+      if (!jevent[F("p")].isNull()) {
+        pattern = jevent[F("p")].as<uint8_t>();
+      }
+
+      uint32_t color = 0x00FF0000;
+      if (!jevent[F("c")].isNull()) {
+        const char* cs = jevent[F("c")];
+        if (strlen(cs) == 10) {
+          color = strtoul(cs, NULL, 16);
+        }
+      }
+
+      const char* sound = "";
+      if (!jevent[F("s")].isNull()) {
+        sound = jevent[F("s")];
+      }
+
+      const char* voice = "";
+      if (!jevent[F("v")].isNull()) {
+        voice = jevent[F("v")];
+      }
+
+
       struct Event event;
       event.id = next_available_event_id++;
-      event.datetime = refresh_datetime(datetime, frequency);
+      event.datetime = datetime;
       event.frequency = frequency;
+      event.end_datetime = end_datetime;
       snprintf(event.description, sizeof(event.description), "%s", description);
       event.exclude = exclude;
       event.pattern = pattern;
@@ -953,11 +1143,10 @@ bool load_events_file() {
       snprintf(event.sound, sizeof(event.sound), "%s", sound);
       snprintf(event.voice, sizeof(event.voice), "%s", voice);
       event.timestamp = 0;
-      event.do_long_notify = false;
       events.push_back(event);
 
-      Serial.print("refreshed datetime: ");
-      Serial.println(asctime(&event.datetime));
+      Serial.print("event put on schedule: ");
+      Serial.println(asctime(&datetime));
     }
   }
   doc.clear(); // not sure if this is necessary.
@@ -966,10 +1155,10 @@ bool load_events_file() {
 }
 
 
-bool save_events_file(String fs_path, String json, String* message) {
+bool save_file(String fs_path, String json, String* message) {
   if (fs_path == "") {
     if (message) {
-      *message = F("save_events_file(): Filename is empty. Data not saved.");
+      *message = F("save_file(): Filename is empty. Data not saved.");
     }
     return false;
   }
@@ -985,13 +1174,13 @@ bool save_events_file(String fs_path, String json, String* message) {
   }
   else {
     if (message) {
-      *message = F("save_events_file(): Could not open file.");
+      *message = F("save_file(): Could not open file.");
     }
     return false;
   }
 
   if (message) {
-    *message = F("save_events_file(): Data saved.");
+    *message = F("save_file(): Data saved.");
   }
   return true;
 }
@@ -1001,8 +1190,7 @@ void check_for_recent_events(uint16_t interval) {
   static uint32_t pm = millis();
   if ((millis() - pm) >= interval) {
     pm = millis();
-    uint8_t i = 0;
-    for (auto & event : events) {
+    for (uint16_t i = 0; i < events.size(); i++) {
       time_t now = 0;
       struct tm local_now = {0};
       time(&now);
@@ -1022,40 +1210,24 @@ void check_for_recent_events(uint16_t interval) {
       //tzset();
 
       time_t tnow = mktime(&local_now);
-      time_t tevent = mktime(&event.datetime);
+      time_t tevent = mktime(&events[i].datetime);
 
       double dt = difftime(tevent, tnow); // seconds
-      //Serial.println(event.description);
-      //Serial.print("dt: ");
-      //Serial.println(dt);
-      //const double happening_now_cutoff = (-60.0*EVENT_CHECK_INTERVAL)/1000; //120 seconds for 2000 millisecond check interval
       const double happening_now_cutoff = (-6.0*EVENT_CHECK_INTERVAL)/1000; //30 seconds for 2000 millisecond check interval
       if (happening_now_cutoff <= dt && dt <= 0) {
-        //bool already_seen_recently = (difftime(event.timestamp, tnow) > active_cutoff);
-        //if (!already_seen_recently) {
-          uint8_t mask = 1 << event.datetime.tm_wday;
-          if ((event.exclude & mask) == 0) {
-            event.timestamp = tnow;
-            //struct AudioMessage audio_message = {event.id, event.datetime, "This%20is%20a%20long%20description%20meant%20to%20blow%20the%20heap.", "null", "en-ca&v=Clara", event.do_long_notify};
-            struct AudioMessage audio_message = {event.id, event.datetime, "", "", "", event.do_long_notify};
-            snprintf(audio_message.description, sizeof(audio_message.description), "%s", event.description);
-            snprintf(audio_message.sound, sizeof(audio_message.sound), "%s", event.sound);
-            snprintf(audio_message.voice, sizeof(audio_message.voice), "%s", event.voice);
-            xQueueSend(qaudio_messages, (void *)&audio_message, 0);
-          }
-        //}
+        uint8_t mask = 1 << events[i].datetime.tm_wday;
+        if ((events[i].exclude & mask) == 0) {
+          events[i].timestamp = tevent;
+          struct AudioMessage audio_message = {events[i].id, "", "", "", events[i].timestamp, false};
+          snprintf(audio_message.description, sizeof(audio_message.description), "%s", events[i].description);
+          snprintf(audio_message.sound, sizeof(audio_message.sound), "%s", events[i].sound);
+          snprintf(audio_message.voice, sizeof(audio_message.voice), "%s", events[i].voice);
+          xQueueSend(qaudio_messages, (void *)&audio_message, 0);
+        }
         // refresh_datetime() has the effect of moving the datetime away from the 
         // happening now detection window which prevents multiple unneccessary detections
-        event.datetime = refresh_datetime(event.datetime, event.frequency);
+        events[i].datetime = refresh_datetime(events[i].datetime, events[i].frequency);
       }
-      //else if (dt < 0) {
-      //  // even though the datetime has been refreshed to the next occurrence
-      //  // we do not want to update timestamp.
-      //  // we want to give the user time to see the visual indication that the
-      //  // event occurred and give the user the opportunity to replay the message 
-      //  event.datetime = refresh_datetime(event.datetime, event.frequency);
-      //}
-
     }
   }
 }
@@ -1064,17 +1236,18 @@ void check_for_recent_events(uint16_t interval) {
 
 void single_click_handler(Button2& b) {
   Serial.println("single_click");
-  for (auto & event : events) {
-    if (event.timestamp > 0 && !event.do_long_notify) {
-      event.do_long_notify = true;
-      struct AudioMessage audio_message;
-      audio_message.id = event.id;
-      audio_message.datetime = event.datetime;
-      snprintf(audio_message.description, sizeof(audio_message.description), "%s", event.description);
-      snprintf(audio_message.sound, sizeof(audio_message.sound), "%s", event.sound);
-      snprintf(audio_message.voice, sizeof(audio_message.voice), "%s", event.voice);
-      audio_message.do_long_notify = true;
-      xQueueSend(qaudio_messages, (void *)&audio_message, 0);
+  if (!is_audio_message_queued) {
+    for (uint16_t i = 0; i < events.size(); i++) {
+      if (events[i].timestamp > 0) {
+        struct AudioMessage audio_message;
+        audio_message.id = events[i].id;
+        snprintf(audio_message.description, sizeof(audio_message.description), "%s", events[i].description);
+        snprintf(audio_message.sound, sizeof(audio_message.sound), "%s", events[i].sound);
+        snprintf(audio_message.voice, sizeof(audio_message.voice), "%s", events[i].voice);
+        audio_message.timestamp = events[i].timestamp;
+        audio_message.do_long_notify = true;
+        xQueueSend(qaudio_messages, (void *)&audio_message, 0);
+      }
     }
   }
 }
@@ -1082,8 +1255,18 @@ void single_click_handler(Button2& b) {
 
 void long_click_handler(Button2& b) {
   Serial.println("long_click");
-  for (auto & event : events) {
-    event.timestamp = 0;
+  for (uint16_t i = 0; i < events.size(); i++) {
+    Serial.println(events[i].description);
+    events[i].timestamp = 0;
+    if (is_expired(events[i].datetime, events[i].end_datetime)) {
+      Serial.println("expired event deleted.");
+      events.erase(events.begin()+i);
+    }
+  }
+
+  Serial.println("after");
+  for (uint16_t i = 0; i < events.size(); i++) {
+    Serial.println(events[i].description);
   }
   FastLED.clear();
 }
@@ -1141,7 +1324,7 @@ bool verify_timezone(const String iana_tz) {
     delay (1);
     if (millis() - started > TIMEZONED_TIMEOUT) {
       udp.stop();  
-      Serial.println("fetch timezone timed out.");
+      Serial.println("verify_timezone(): fetch timezone timed out.");
       return false;
     }
   }
@@ -1151,7 +1334,7 @@ bool verify_timezone(const String iana_tz) {
   recv.reserve(60);
   while (udp.available()) recv += (char)udp.read();
   udp.stop();
-  Serial.print(F("(round-trip "));
+  Serial.print(F("verify_timezone(): (round-trip "));
   Serial.print(millis() - started);
   Serial.println(F(" ms)  "));
   if (recv.substring(0,6) == "ERROR ") {
@@ -1164,7 +1347,7 @@ bool verify_timezone(const String iana_tz) {
     tz.posix_tz = recv.substring(recv.indexOf(" ", 4) + 1);
     return true;
   }
-  Serial.println("not found.");
+  Serial.println("verify_timezone(): timezone not found.");
   return false;
 }
 // end ezTime MIT licensed code
@@ -1313,9 +1496,13 @@ void web_server_station_setup(void) {
     if (id != "") {
       //String fs_path = form_path(type, id);
       String fs_path = id;
-      if (save_events_file(fs_path, json, &message)) {
+      if (id == "/files/events.json" && save_file(fs_path, json, &message)) {
         //gfile_list_needs_refresh = true;
         events_reload_needed = true;
+        rc = 200;
+      }
+      if (id == "/files/sound_URLs.json" && save_file(fs_path, json, &message)) {
+        //gfile_list_needs_refresh = true;
         rc = 200;
       }
     }
@@ -1335,89 +1522,6 @@ void web_server_station_setup(void) {
     String out_json = "{\"special_colors\":[" + special_colors_json + ", {\"n\":\"?????\",\"v\":\"0xFFFFFFFF\"}]}"; 
     request->send(200, "application/json", out_json);
   });
-
-  // TODO: memory hog?
-  //web_server.on("/options.json", HTTP_GET, [](AsyncWebServerRequest *request) {
-  //  String options_json = "{\"patterns\":[" + patterns_json + "],\"special_colors\":[" + special_colors_json + ", {\"Random\":\"0xFFFFFFFF\"}]}"; 
-  //  request->send(200, "application/json", options_json);
-  //});
-
-  /*
-  web_server.on("/save", HTTP_POST, [](AsyncWebServerRequest *request) {
-    int rc = 400;
-    String message;
-
-    String type = request->getParam("t", true)->value();
-    String id = request->getParam("id", true)->value();
-    String json = request->getParam("json", true)->value();
-
-    if (id != "") {
-      String fs_path = form_path(type, id);
-      if (save_data(fs_path, json, &message)) {
-        ui_request.type = type;
-        ui_request.id = id;
-        gfile_list_needs_refresh = true;
-        rc = 200;
-      }
-    }
-    else {
-      message = "Invalid type.";
-    }
-
-    request->send(rc, "application/json", "{\"message\": \""+message+"\"}");
-  });
-
-
-  web_server.on("/load", HTTP_POST, [](AsyncWebServerRequest *request) {
-    int rc = 400;
-    String message;
-
-    String type = request->getParam("t", true)->value();
-    String id = request->getParam("id", true)->value();
-
-    if (id != "" && (type == "im" || type == "cm" || type == "an" || type == "pl")) {
-      ui_request.type = type;
-      ui_request.id = id;
-      message = ui_request.id + " queued.";
-      rc = 200;
-    }
-    else {
-      message = "Invalid type.";
-    }
-
-    request->send(rc, "application/json", "{\"message\": \""+message+"\"}");
-  });
-
-  // memory hog?
-  web_server.on("/options.json", HTTP_GET, [](AsyncWebServerRequest *request) {
-    String options_json = "{\"files\":"+gfile_list_json + ",\"patterns\":["+patterns_json + "],\"accents\":["+accents_json + "]}"; 
-    request->send(200, "application/json", options_json);
-  });
-
-  web_server.on("/file_list", HTTP_GET, [](AsyncWebServerRequest *request) {
-    request->send(200, "text/plain", gfile_list);
-  });
-
-  web_server.on("/file_list.json", HTTP_GET, [](AsyncWebServerRequest *request) {
-    request->send(200, "application/json", gfile_list_json);
-  });
-
-  web_server.on("/delete", HTTP_POST, [](AsyncWebServerRequest *request) {
-    int params = request->params();
-    for(int i=0; i < params; i++){
-      AsyncWebParameter* p = request->getParam(i);
-      if(p->isPost()){
-        //DEBUG_PRINTF("POST[%s]: %s\n", p->name().c_str(), p->value().c_str());
-
-        String param_name = p->name();
-        // remove leading / and file size from param_name to add only filename to the gdelete_list
-        gdelete_list += param_name.substring(1, param_name.indexOf('\t'));
-        gdelete_list += "\n";
-      }
-    }
-    request->redirect("/remove.htm");
-  });
-  */
 
   // files/ and www/ are both direct children of the littlefs root directory: /littlefs/files/ and /littlefs/www/
   // if the URL starts with /files/ then first look in /littlefs/files/ for the requested file
@@ -1597,6 +1701,36 @@ void web_server_initiate(void) {
     request->redirect("/restart.htm");
   });
 
+  // WiFi scanning code taken from ESPAsyncW3ebServer examples
+  // https://github.com/me-no-dev/ESPAsyncWebServer?tab=readme-ov-file#scanning-for-available-wifi-networks
+  // Copyright (c) 2016 Hristo Gochkov. All rights reserved.
+  // This WiFi scanning code snippet is under the GNU Lesser General Public License.
+  web_server.on("/scan", HTTP_GET, [](AsyncWebServerRequest *request){
+    String json = "[";
+    int n = WiFi.scanComplete();
+    if (n == -2) {
+      WiFi.scanNetworks(true, true); // async scan, show hidden
+    } else if (n) {
+      for (int i = 0; i < n; ++i) {
+        if (i) json += ",";
+        json += "{";
+        json += "\"rssi\":"+String(WiFi.RSSI(i));
+        json += ",\"ssid\":\""+WiFi.SSID(i)+"\"";
+        json += ",\"bssid\":\""+WiFi.BSSIDstr(i)+"\"";
+        json += ",\"channel\":"+String(WiFi.channel(i));
+        json += ",\"secure\":"+String(WiFi.encryptionType(i));
+        //json += ",\"hidden\":"+String(WiFi.isHidden(i)?"true":"false"); // ESP32 does not support isHidden()
+        json += "}";
+      }
+      WiFi.scanDelete();
+      if(WiFi.scanComplete() == -2){
+        WiFi.scanNetworks(true);
+      }
+    }
+    json += "]";
+    request->send(200, "application/json", json);
+    json = String();
+  });
 
   if (ON_STA_FILTER) {
     web_server_station_setup();
@@ -1607,37 +1741,6 @@ void web_server_initiate(void) {
 
   web_server.begin();
 }
-
-
-//time_t time_provider() {
-//  // restore time zone here in case it was changed somewhere else
-//  unsetenv("TZ");
-//  setenv("TZ", timezone, 1);
-//  tzset();
-//
-//  // derived from code found within getLocalTime() and modified to return seconds from epoch with respect to the local time zone
-//  time_t now = 0;
-//  struct tm local_now = {0};
-//  time(&now);
-//  localtime_r(&now, &local_now);
-//  if (local_now.tm_year > (2016 - 1900)) {
-//    // Time.h works with seconds from epoch with the expectation that time zone offsets are already included in that number
-//    // mktime will convert the localtime struct back to time_t, but we have to set the time zone back to GMT, so the
-//    // seconds from epoch it outputs is with respect to our time zone; otherwise it will undo the time zone offset during the conversion.
-//    unsetenv("TZ");
-//    setenv("TZ", "GMT0", 1);
-//    tzset();
-//    time_t t = mktime(&local_now);
-//
-//    unsetenv("TZ");
-//    setenv("TZ", timezone, 1);
-//    tzset();
-//
-//    return t;
-//  }
-//
-//  return 0;
-//}
 
 
 void DBG_create_test_data(tm local_now) {
@@ -1667,6 +1770,8 @@ void DBG_create_test_data(tm local_now) {
   //datetime.tm_min = 59;
   //datetime.tm_sec = 0;
 
+  fill_in_datetime(&datetime);
+
   if (frequency == 'w') {
     datetime.tm_wday = 0;
   }
@@ -1678,21 +1783,33 @@ void DBG_create_test_data(tm local_now) {
   uint8_t pattern = 1;
   uint32_t color = 0x00FF0000; // solid red
   //String sound = "debug_test1.mp3";
-  char sound[SOUND_SIZE] = "null";
+  char sound[SOUND_SIZE] = ""; // no sound
   char voice[VOICE_SIZE] = "en-ca&v=Clara";
-  struct Event event = {next_available_event_id++, refresh_datetime(datetime, frequency), frequency, "", exclude, pattern, color, "", "", 0, false};
+  struct Event event = {next_available_event_id++, refresh_datetime(datetime, frequency), frequency, {0}, "", exclude, pattern, color, "", "", 0};
+  //int tm_sec   seconds [0,61]
+  //int tm_min   minutes [0,59]
+  //int tm_hour  hour [0,23]
+  //int tm_mday  day of month [1,31]
+  //int tm_mon   month of year [0,11]
+  //int tm_year  years since 1900
+  //int tm_wday  day of week [0,6] (Sunday = 0)
+  //int tm_yday  day of year [0,365]
+  //int tm_isdst daylight savings flag
+  event.end_datetime = {.tm_sec = 0, .tm_min = 0, .tm_hour = 0, .tm_mday = 1, .tm_mon = 0, .tm_year = 70, .tm_wday = 4, .tm_yday = 0, .tm_isdst = -1};
   snprintf(event.description, sizeof(event.description), "%s", description);
   snprintf(event.sound, sizeof(event.sound), "%s", sound);
   snprintf(event.voice, sizeof(event.voice), "%s", voice);
   events.push_back(event);
 
   datetime.tm_sec = local_now.tm_sec+25;
+  fill_in_datetime(&datetime);
   char description2[DESCRIPTION_SIZE] = "debug+test+2,+longer+description";
   pattern = 2;
   color = 0x01000000;
   char sound2[SOUND_SIZE] = "chime.mp3";
   char voice2[VOICE_SIZE] = "en-ca&v=Clara";
-  struct Event event2 = {next_available_event_id++, refresh_datetime(datetime, frequency), frequency, "", exclude, pattern, color, "", "", 0, false};
+  struct Event event2 = {next_available_event_id++, refresh_datetime(datetime, frequency), frequency, {0}, "", exclude, pattern, color, "", "", 0};
+  event2.end_datetime = {.tm_sec = 0, .tm_min = 0, .tm_hour = 0, .tm_mday = 1, .tm_mon = 0, .tm_year = 70, .tm_wday = 4, .tm_yday = 0, .tm_isdst = -1};
   snprintf(event2.description, sizeof(event2.description), "%s", description2);
   snprintf(event2.sound, sizeof(event2.sound), "%s", sound2);
   snprintf(event2.voice, sizeof(event2.voice), "%s", voice2);
@@ -1806,6 +1923,9 @@ void setup() {
     while (1) yield(); // cannot proceed without filesystem
   }
 
+  // scanNetworks() only returns results the second time it is called, so call it here so when it is called again by the config page results will be returned
+  WiFi.scanNetworks(false, true); // synchronous scan, show hidden
+
   if (attempt_connect()) {
     Serial.println("Attempting to WiFi connection.");
   	if (!wifi_connect()) {
@@ -1821,32 +1941,40 @@ void setup() {
   mdns_setup();
   web_server_initiate();
 
-  Serial.print("Attempting to fetch time from ntp server.");
-  configTzTime(tz.posix_tz.c_str(), "pool.ntp.org");
-  struct tm local_now = {0};
-  uint8_t attempt_cnt = 0;
-  while (true) {
-    time_t now;
-    time(&now);
-    localtime_r(&now, &local_now);
-    if(local_now.tm_year > (2016 - 1900)){
-      break;
+  if (ON_STA_FILTER) {
+    Serial.print("Attempting to fetch time from ntp server.");
+    configTzTime(tz.posix_tz.c_str(), "pool.ntp.org");
+    //configTzTime(tz.posix_tz.c_str(), "192.168.1.99");
+    struct tm local_now = {0};
+    uint8_t attempt_cnt = 0;
+    while (true) {
+      time_t now;
+      time(&now);
+      localtime_r(&now, &local_now);
+      if(local_now.tm_year > (2016 - 1900)){
+        break;
+      }
+      delay(10);
+      attempt_cnt++;
+      if (attempt_cnt == 100) {
+        attempt_cnt = 0;
+        Serial.print(".");
+      }
     }
-    delay(10);
-    attempt_cnt++;
-    if (attempt_cnt == 100) {
-      attempt_cnt = 0;
-      Serial.print(".");
-    }
+    Serial.printf("\n***** local time: %d/%02d/%02d %02d:%02d:%02d *****\n", local_now.tm_year+1900, local_now.tm_mon+1, local_now.tm_mday, local_now.tm_hour, local_now.tm_min, local_now.tm_sec);
+
+    TaskHandle_t Task1;
+    xTaskCreatePinnedToCore(aural_notifier, "Task1", 10000, NULL, 1, &Task1, 0);
+
+    load_events_file();
+    //DBG_create_test_data(local_now);
+    check_for_recent_events(0);
+
+    //while(true) {
+    //  delay(1000);
+    //}
   }
-  Serial.printf("\nlocal time: %s", asctime(&local_now));
 
-  TaskHandle_t Task1;
-  xTaskCreatePinnedToCore(aural_notifier, "Task1", 10000, NULL, 1, &Task1, 0);
-
-  load_events_file();
-  //DBG_create_test_data(local_now);
-  check_for_recent_events(0);
 }
 
 
@@ -1871,19 +1999,6 @@ void loop() {
   if (tz.unverified_iana_tz != "") {
     verify_timezone(tz.unverified_iana_tz);
   }
-
-  // for DEBUGGING
-  //static uint32_t pm = 0;
-  //static uint8_t num_replays = 2;
-  //if ((millis()-pm) > (uint32_t)45000 && num_replays > 0) {
-  //  num_replays--;
-  //  pm = millis();
-  //  for (auto & event : events) {
-  //    if (event.timestamp > 0 && !event.do_long_notify) {
-  //      event.do_long_notify = true;
-  //    }
-  //  }
-  //}
 }
 
 

@@ -132,7 +132,7 @@
   </style>
 </head>
 <body>
-  <a id="return_main_menu" href="./index.htm"><svg height="24px" width="24px" viewBox="0 0 16 16" id="Layer_1" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><path fill="white" d="M15.45,7L14,5.551V2c0-0.55-0.45-1-1-1h-1c-0.55,0-1,0.45-1,1v0.553L9,0.555C8.727,0.297,8.477,0,8,0S7.273,0.297,7,0.555  L0.55,7C0.238,7.325,0,7.562,0,8c0,0.563,0.432,1,1,1h1v6c0,0.55,0.45,1,1,1h3v-5c0-0.55,0.45-1,1-1h2c0.55,0,1,0.45,1,1v5h3  c0.55,0,1-0.45,1-1V9h1c0.568,0,1-0.437,1-1C16,7.562,15.762,7.325,15.45,7z"/></svg></a>
+  <a id="return_main_menu" href="index.htm"><svg height="24px" width="24px" viewBox="0 0 16 16" id="Layer_1" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><path fill="white" d="M15.45,7L14,5.551V2c0-0.55-0.45-1-1-1h-1c-0.55,0-1,0.45-1,1v0.553L9,0.555C8.727,0.297,8.477,0,8,0S7.273,0.297,7,0.555  L0.55,7C0.238,7.325,0,7.562,0,8c0,0.563,0.432,1,1,1h1v6c0,0.55,0.45,1,1,1h3v-5c0-0.55,0.45-1,1-1h2c0.55,0,1,0.45,1,1v5h3  c0.55,0,1-0.45,1-1V9h1c0.568,0,1-0.437,1-1C16,7.562,15.762,7.325,15.45,7z"/></svg></a>
   <h3>Link Sounds</h3>
   <div id="main_div">
     <div id="button_container">
@@ -207,7 +207,7 @@ async function save() {
 
   //console.log(`id=sounds.json&json=` + json);
 
-/*
+
   let success = false;
   try {
     const t = await fetch(base_url+"/save", {
@@ -215,7 +215,7 @@ async function save() {
       headers: {
         "Content-Type": "application/x-www-form-urlencoded"
       },
-      body: "id=/files/soundURLs.json&json=" + json
+      body: "id=/files/sound_URLs.json&json=" + json
     });
     reply = await t.json();
     console.log(reply);
@@ -235,7 +235,7 @@ async function save() {
     sb.setAttribute("fill", "#6b050c");
     setTimeout(function(){sb.setAttribute("fill", "#777")}, 1000);
   }
-*/
+
 }
 
 
@@ -260,7 +260,7 @@ function handle_move(num_id, direction) {
 
 
 let sound_html_template = `
-<section id="e!!SOUND_NUM!!" data-sound="e!!SOUND_NUM!!">
+<section id="s!!SOUND_NUM!!" data-sound="s!!SOUND_NUM!!">
     <input type="button" value="x" style="width: 20px; color:white;background-color:red" onclick=(function(){document.getElementById("e!!SOUND_NUM!!").remove()})() />
 
     <div>
@@ -287,7 +287,7 @@ async function add_sound_fields() {
 
 
 async function load_sounds() {
-/*
+
   let sounds;
   await fetch(base_url+"/files/sound_URLs.json").then((response) => {
     if (response.ok) {
@@ -301,10 +301,11 @@ async function load_sounds() {
   .catch((error) => {
     console.log(error)
   });
-*/
 
-  let sounds_json = JSON.parse('{"sounds":[{"d":"Ding Dong","u":"http://www.example.com/ding_dong.mp3"},{"d":"Alert!","u":"http://www.example.com/alert.mp3"}]}');
-  let sounds = sounds_json["sounds"];
+
+  //let sounds_json = JSON.parse('{"sounds":[{"d":"Ding Dong","u":"http://www.example.com/ding_dong.mp3"},{"d":"Alert!","u":"http://www.example.com/alert.mp3"}]}');
+  //let sounds = sounds_json["sounds"];
+
   if (sounds) {
     for (let i = 0; i < sounds.length; i++) {
       add_sound_fields();
