@@ -432,19 +432,25 @@ void visual_reset() {
 }
 
 
+// last_id_seen needs to be global so it can be set back to the default by long_click_handler()
+// otherwise a reoccurrence of an event with the same id as last_id_seen may not be shown.
+uint32_t last_id_seen = 0; // an id of 0 is never used so a last_id_seen of 0 indicates never seen
 void visual_notifier() {
+  const uint32_t SHOW_TIME = 4000; // milliseconds
   static uint16_t i = 0;
   static uint32_t pm = 0;
-  static uint32_t last_id_seen = 0;
   static bool refill = true;
   if (!events.empty()) {
     struct Event event = events[i];
-    if ((millis()-pm) > 4000) {
-      pm = millis();
-      i = (i+1) % events.size();
-    }
     if (event.timestamp != 0) {
+      // if timestamp is 0 then event has not happened since last time notices were cleared
+      // so there is no need to show a visual notice for it
+
       if (event.id != last_id_seen) {
+        // by tracking the last_id_seen we can determine if a new notice is about to be shown
+        // if it is new notice then reinitialize
+        // should only reinitialize once for the SHOW_TIME interval so the pattern can be
+        // animated correctly instead of being restarted over and over
         last_id_seen = event.id;
         refill = true;
         visual_reset();
@@ -537,10 +543,15 @@ void visual_notifier() {
           break;
       }
     }
-    else {
+
+    // iterate if the event has been shown for SHOW_TIME or event should not be shown
+    if ((millis()-pm) > SHOW_TIME || event.timestamp == 0) {
+      pm = millis();
       i = (i+1) % events.size();
     }
+
   }
+
   show();
 }
 
@@ -864,6 +875,9 @@ tm refresh_datetime(tm datetime, char frequency) {
   //setenv("TZ", timezone, 1);
   //tzset();
   if (t2 <= tnow) {
+    /*
+    // this seems unnessary since we set next_event = datetime above
+
     // event is in the past, so we need to update it
     next_event.tm_sec = datetime.tm_sec;
     next_event.tm_min = datetime.tm_min;
@@ -875,6 +889,7 @@ tm refresh_datetime(tm datetime, char frequency) {
     next_event.tm_mday = datetime.tm_mday;
     next_event.tm_mon = datetime.tm_mon;
     next_event.tm_year = datetime.tm_year;
+    */
 
     if (frequency == 'o') { // once, one-shot
       // the code that detects if an event is happening now allows a window of time an event can
@@ -910,6 +925,8 @@ tm refresh_datetime(tm datetime, char frequency) {
       next_event.tm_year = local_now.tm_year;
       t2 = mktime(&next_event);
       if (t2 <= tnow) {
+        // equivalent to adding 24 hours.
+        // if the next day has 23 or 25 hours this will result in the hour being off by 1
         next_event.tm_mday += 1;
       }
     }
@@ -975,6 +992,13 @@ tm refresh_datetime(tm datetime, char frequency) {
     t2 = mktime(&next_event);
   }
   localtime_r(&t2, &next_event); // tm_wday, tm_yday, and tm_isdst are filled in with the proper values
+
+  // if updating the event causes it to cross a daylight saving begin or end time then tm_hour will be off by 1.
+  // to fix this we can process the event through mktime and localtime_r to get a well formed event
+  // since we just processed the event through mktime and localtime_r  the event should be well formed
+  // so we can fix the off by one error by setting the hour back to the original hour pass to this function
+  next_event.tm_hour = datetime.tm_hour;
+
   return next_event;
 }
 
@@ -1132,7 +1156,7 @@ bool load_events_file() {
 
 
       struct Event event;
-      event.id = next_available_event_id++;
+      event.id = next_available_event_id++; // an id of 0 is never used
       event.datetime = datetime;
       event.frequency = frequency;
       event.end_datetime = end_datetime;
@@ -1255,14 +1279,20 @@ void single_click_handler(Button2& b) {
 
 void long_click_handler(Button2& b) {
   Serial.println("long_click");
-  for (uint16_t i = 0; i < events.size(); i++) {
+
+  for (uint16_t i = 0; i < events.size(); ) {
     Serial.println(events[i].description);
     events[i].timestamp = 0;
     if (is_expired(events[i].datetime, events[i].end_datetime)) {
       Serial.println("expired event deleted.");
       events.erase(events.begin()+i);
     }
+    else {
+      // since erasing changes size an index only increment if event was not erased
+      i++;
+    }
   }
+  last_id_seen = 0;
 
   Serial.println("after");
   for (uint16_t i = 0; i < events.size(); i++) {
@@ -1539,8 +1569,8 @@ void web_server_station_setup(void) {
     if (request->method() == HTTP_OPTIONS) {
       request->send(200);
     } else {
-      //request->send(404, "text/plain", "404"); // for testing
-      request->redirect("/"); // will cause redirect loop if request handlers are not set up properly
+      request->send(404, "text/plain", "404 - NOT FOUND");
+      //request->redirect("/"); // will cause redirect loop if request handlers are not set up properly
     }
   });
 }
@@ -1902,6 +1932,13 @@ void setup() {
   audio_out->SetPinout(21, 22, 17); // works
   uint8_t volume = 100;
   audio_out->SetGain(((float)volume)/100.0);
+  // speakers will crackle but that will stop after the first sound is played even after the sound has finished playing.
+  // this initialization will prevent that crackle now
+  // playing an mp3 will do this initialization, but doing it now will prevent that crackle
+  //audio_out->SetBitsPerSample(16); // Constant for MP3 decoder
+  //audio_out->SetChannels(2);
+  audio_out->begin();
+  audio_out->stop();
 
   // random8 is also based off of random16 seed
   random16_set_seed(8934); // taken from NoisePlayground.ino, not sure if this a particularly good seed
@@ -1928,11 +1965,11 @@ void setup() {
 
   if (attempt_connect()) {
     Serial.println("Attempting to WiFi connection.");
-  	if (!wifi_connect()) {
-	  	// failure to connect will result in creating AP
+    if (!wifi_connect()) {
+      // failure to connect will result in creating AP
       espDelay(2000);
-  		wifi_AP();
-	  }
+      wifi_AP();
+    }
   }
   else {
     wifi_AP();
@@ -1974,7 +2011,6 @@ void setup() {
     //  delay(1000);
     //}
   }
-
 }
 
 
