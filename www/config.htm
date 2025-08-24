@@ -171,19 +171,27 @@ async function handle_iana_tz_change(fetch_iana) {
   // IP addresses is not 100% reliable, so we need to give the user the option to manually enter data in these fields.
   let iana_tz = document.getElementById("iana_tz").value;
   if (fetch_iana || iana_tz === "") {
+    let data;
     try {
       const response = await fetch("http://worldtimeapi.org/api/ip"); // returns local time based on location of IP address
-      const datetime_json = await response.json();
-      iana_tz = datetime_json["timezone"];
-      document.getElementById("iana_tz").value = iana_tz;
+      if (!response.ok) {
+        throw new Error("Could not fetch IANA timezone.");
+      }
+      data = await response.json();
+      if (!data["timezone"]) {
+        throw new Error("IANA timezone response is invalid.");
+      }
     }
     catch(e) {
       console.error(e);
+      return;
     }
+
+    iana_tz = data["timezone"];
+    document.getElementById("iana_tz").value = iana_tz;
   }
 
   if (iana_tz != "") {
-    let success = false;
     try {
       const response = await fetch(base_url+"/verify_timezone", {
         method: "POST",
@@ -192,37 +200,46 @@ async function handle_iana_tz_change(fetch_iana) {
         },
         body: "iana_tz=" + iana_tz
       });
-      // TODO: need to check response code, might not be 200 !!!
-      success = true;
+      if (!response.ok) {
+        throw new Error("Could not POST to /verify_timezone.");
+      }
     }
     catch(e) {
       console.error(e);
-      success = false;
+      return;
     }
-    if (success) {
-      setTimeout(get_timezone, 2000);
-    }
+
+    setTimeout(get_timezone, 2000);
   }
 }
 
 
 async function get_timezone() {
   let is_default_tz = true;
+  let data;
   try {
     const response = await fetch(base_url+"/get_timezone");
-    const timezone = await response.json();
-    console.log(timezone);
-    is_default_tz = timezone["is_default_tz"];
-    let iana_tz = timezone["iana_tz"];
-    let posix_tz = timezone["posix_tz"];
-
-    let el_iana_tz = document.getElementById("iana_tz");
-    el_iana_tz.value = iana_tz;
-    document.getElementById("posix_tz").value = posix_tz;
+    if (!response.ok) {
+      throw new Error("Could not fetch from /get_timezone.");
+    }
+    data = await response.json();
+    if (!data["posix_tz"]) {
+      throw new Error("Response invalid from /get_timezone");
+    }
   }
   catch(e) {
     console.error(e);
+    return is_default_tz;
   }
+
+  is_default_tz = data["is_default_tz"];
+  let iana_tz = data["iana_tz"];
+  let posix_tz = data["posix_tz"];
+
+  let el_iana_tz = document.getElementById("iana_tz");
+  el_iana_tz.value = iana_tz;
+  document.getElementById("posix_tz").value = posix_tz;
+
   return is_default_tz;
 }
 
@@ -236,7 +253,7 @@ async function create_voice_options() {
     if (response.ok) {
       return response.json();
     }
-    throw new Error('Error fetching default voice');
+    throw new Error('Could not fetch default voice');
   })
   .then((json) => {
     default_voice = json["tts_default_voice"];
@@ -249,7 +266,7 @@ async function create_voice_options() {
     if (response.ok) {
       return response.json();
     }
-    throw new Error('Error fetching voicerss.json');
+    throw new Error('Could not fetch voicerss.json');
   })
   .then((json) => {
     let optgroups = json["og"];
@@ -305,49 +322,57 @@ function sp() {
 
 
 async function get_wifi_networks() {
+  let data;
   try {
     const response = await fetch(base_url+"/scan");
     if (!response.ok) {
-      throw new Error('Error fetching getting WiFi networks');
+      throw new Error("Could not WiFi networks.");
     }
-    let data = await response.json();
-    if (!data && !data.length) {
-      return
+    data = await response.json();
+    if (!data.length) {
+      throw new Error("WiFi scan results are invalid.");
     }
-
-    console.log(data);
-    let options_html =  "";
-    let set = new Set();
-    for (object of data) {
-      if (object.ssid) {
-        if (!set.has(object.ssid)) {
-          set.add(object.ssid)
-          options_html += `<option>${object.ssid}</option>`;
-        }
-      }
-    }
-    let datalist_ssid = document.getElementById("ssids");
-    datalist_ssid.innerHTML = options_html;
   }
   catch(e) {
     console.error(e);
+    return;
   }
+
+  let options_html =  "";
+  let set = new Set();
+  for (object of data) {
+    if (object.ssid) {
+      if (!set.has(object.ssid)) {
+        set.add(object.ssid)
+        options_html += `<option>${object.ssid}</option>`;
+      }
+    }
+  }
+  let datalist_ssid = document.getElementById("ssids");
+  datalist_ssid.innerHTML = options_html;
 }
 
 
 async function get_config() {
+  let data;
   try {
     const response = await fetch(base_url+"/get_config");
-    const config = await response.json();
-    console.log(config);
-    document.getElementById("ssid").value = config["ssid"];
-    document.getElementById("mdns_host").value = config["mdns_host"];
-    document.getElementById("tts_api_key").value = config["tts_api_key"];
-    //document.getElementById("tts_default_voice").value = config["tts_default_voice"];
+    if (!response.ok) {
+      throw new Error("Could not fetch from /get_config.");
+    }
+    data = await response.json();
+    if (!data["ssid"]) {
+      throw new Error("Error /get_config results are invalid.");
+    }
   }
   catch(e) {
     console.error(e);
+    return;
   }
+
+  document.getElementById("ssid").value = data["ssid"];
+  document.getElementById("mdns_host").value = data["mdns_host"];
+  document.getElementById("tts_api_key").value = data["tts_api_key"];
 }
 
 

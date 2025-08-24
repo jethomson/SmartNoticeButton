@@ -7,7 +7,7 @@
   <title>Smart Notifier Button</title>
   <style>
   html {
-    touch-action: manipulation
+    touch-action: manipulation;
     overflow: auto;
   }
 
@@ -63,6 +63,18 @@
 </head>
 
 <body>
+  <span id="ip"></span>
+
+  <details>
+    <summary>Instructions</summary>
+    <b>Create Events: one-time or reoccurring events with visual and aural notification.</b>
+    <br>
+    <b>Link Sounds: add URLs to mp3s which will be listed as Sound options in Create Events.</b>
+    <br>
+    <b>File List: simple list of files saved to flash storage.</b>
+    <br>
+    <b>Configuration: enter WiFi credentials, timezone, etc.</b>
+  </details>
   <div class="button-container">
     <div class="grid-item-button">
       <a href="./events_creator.htm"><button>Create Events</button></a>
@@ -80,5 +92,40 @@
       <a href="./restart.htm"><button class="bred">Restart</button></a>
     </div>
   </div>
+
+<script>
+
+let base_url = "";
+if (window.location.protocol == "file:") {
+  // makes for easier debugging.
+  // if html is loaded locally, can see the results of editing more easily.
+  // otherwise every change to html would require uploading new version to microcontroller.
+  base_url = "http://smartbutton.local";
+}
+
+async function get_ip() {
+  let data;
+  try {
+    const response = await fetch(base_url+"/get_ip");
+    if (!response.ok) {
+      throw new Error('Could not determine local IP address');
+    }
+    data = await response.json();
+    if (!data["IP"]) {
+      throw new Error("JSON data is invalid.");
+    }
+  }
+  catch(e) {
+    console.error(e);
+    return
+  }
+
+  let el_ip = document.getElementById("ip");
+  el_ip.innerHTML = data["IP"];
+}
+
+window.addEventListener("load", get_ip);
+</script>
+
 </body>
 </html>

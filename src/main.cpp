@@ -18,16 +18,16 @@
 
 #include <Arduino.h>
 #include <FS.h>
-#include "credentials.h" // set const char *wifi_ssid and const char *wifi_password in include/credentials.h
+//#include "credentials.h" // set const char *wifi_ssid and const char *wifi_password in include/credentials.h
 #include <WiFi.h>
 #include <WiFiUdp.h>
 //#include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <DNSServer.h>
 #include <ESPmDNS.h>
-////#include <SPIFFSEditor.h>
+//#include <SPIFFSEditor.h>
 #include <LittleFS.h>
-////#include <SPI.h>
+//#include <SPI.h>
 #include <Preferences.h>
 
 #include <FastLED.h>
@@ -1613,6 +1613,15 @@ void web_server_initiate(void) {
       }
     }
     request->send(200);
+  });
+
+  web_server.on("/get_ip", HTTP_GET, [](AsyncWebServerRequest *request) {
+    //char timezone_json[53];
+    //snprintf(timezone_json, sizeof(timezone_json), " occurred at %i hours, %i minutes, and %i seconds.", datetime.tm_hour, datetime.tm_min, datetime.tm_sec);
+    String ip_json = "{\"IP\":\"";
+    ip_json += get_ip();
+    ip_json += "\"}";
+    request->send(200, "application/json", ip_json);
   });
 
   web_server.on("/get_timezone", HTTP_GET, [](AsyncWebServerRequest *request) {

@@ -138,7 +138,7 @@
     <div id="button_container">
       <!--input type="text" id="fileid" maxlength=26 placeholder="Enter filename here." value="" autocomplete="off" /-->
       <div id="gap1" class="gap"></div>
-      <button id="btn_save" class="buttonclass" onclick="save()"><svg class="svg-icon" style="width:36px;height:36px" viewBox="0 0 24 24"> <path id="sendSvgP" fill="currentColor" d="M6.5 20Q4.22 20 2.61 18.43 1 16.85 1 14.58 1 12.63 2.17 11.1 3.35 9.57 5.25 9.15 5.88 6.85 7.75 5.43 9.63 4 12 4 14.93 4 16.96 6.04 19 8.07 19 11 20.73 11.2 21.86 12.5 23 13.78 23 15.5 23 17.38 21.69 18.69 20.38 20 18.5 20H13Q12.18 20 11.59 19.41 11 18.83 11 18V12.85L9.4 14.4L8 13L12 9L16 13L14.6 14.4L13 12.85V18H18.5Q19.55 18 20.27 17.27 21 16.55 21 15.5 21 14.45 20.27 13.73 19.55 13 18.5 13H17V11Q17 8.93 15.54 7.46 14.08 6 12 6 9.93 6 8.46 7.46 7 8.93 7 11H6.5Q5.05 11 4.03 12.03 3 13.05 3 14.5 3 15.95 4.03 17 5.05 18 6.5 18H9V20M12 13Z"></path> </svg>&nbsp; Save</button>
+      <button id="btn_save" class="buttonclass" onclick="save()"><svg class="svg-icon" style="width:36px;height:36px" viewBox="0 -960 960 960"> <path id="saveSvg" fill="currentColor" d="M440-320v-326L336-542l-56-58 200-200 200 200-56 58-104-104v326h-80ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z"/></svg> &nbsp; <span id="btn_save_text">Save</span> </button>
     </div>
     <div id="sounds_container" class="grid-container">
         <section id="title_row">
@@ -207,18 +207,24 @@ async function save() {
 
   //console.log(`id=sounds.json&json=` + json);
 
-
   let success = false;
+  let sb = document.getElementById("saveSvg");
+  sb.setAttribute("fill", "#cccccc");
+  let el_btn_save_text = document.getElementById('btn_save_text');
+  let btn_text = el_btn_save_text.innerText;
+  el_btn_save_text.innerText = "Saving";
+
   try {
-    const t = await fetch(base_url+"/save", {
+    const response = await fetch(base_url+"/save", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded"
       },
       body: "id=/files/sound_URLs.json&json=" + json
     });
-    reply = await t.json();
-    console.log(reply);
+    if (!response.ok) {
+      throw new Error('Error saving /files/sound_URLs.json');
+    }
     success = true;
   }
   catch(e) {
@@ -226,14 +232,15 @@ async function save() {
     success = false;
   }
 
-  let sb = document.getElementById("sendSvgP");
   if (success) {
     sb.setAttribute("fill", "#056b0a");
-    setTimeout(function(){sb.setAttribute("fill", "#eee")}, 1000);
+    el_btn_save_text.innerText = "Saved";
+    setTimeout(function(){el_btn_save_text.innerText = btn_text;}, 1000);
+    setTimeout(populate_composite_list, 3000);
   }
   else {
     sb.setAttribute("fill", "#6b050c");
-    setTimeout(function(){sb.setAttribute("fill", "#777")}, 1000);
+    el_btn_save_text.innerText = "Error";
   }
 
 }
