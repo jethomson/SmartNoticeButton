@@ -1,0 +1,12 @@
+# Name,   Type, SubType, Offset,  Size, Flags
+
+# usual location but will be overwritten when flashing merge_bin single file binary
+#nvs,      data, nvs,    0x009000, 0x005000,
+# otadata is not needed, but is there any point in not having it?
+#otadata,  data, ota,    0x00e000, 0x002000,
+
+app0,     app,  ota_0,   0x010000, 0x150000,
+spiffs,   data, spiffs,  0x160000, 0x29B000,
+
+# moving nvs to the end means WiFi credentials, etc. will not be overwritten when flashing merge_bin single file binary
+nvs,      data, nvs,     0x3FB000, 0x005000,

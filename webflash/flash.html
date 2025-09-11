@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ESP Web Tools - SmartNoticeButton</title>
+</head>
+<body>
+    <h1>ESP Web Tools - SmartNoticeButton</h1>
+    <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+    Plug your ESP32 into your computer and click Install to program it directly from this page.
+    <br>
+    <br>
+    <esp-web-install-button manifest="manifest.json"></esp-web-install-button>
+    <br>
+    <br>
+    <br>
+    <a href="https://github.com/jethomson/SmartNoticeButton/tree/main?tab=readme-ov-file">After you have completed programming the ESP32, return to the README for instructions on setting up your device.</a>
+    <br>
+    <br>
+    <br>
+    <br>
+    <br>
+    <br>
+    If you have trouble using this page you can try downloading the firmware, and programming it to the ESP32 using Espressif's site.
+    <br>
+    <ul style="list-style-type: none;">
+        <li><a href="https://jethomson.github.io/SmartNoticeButton/webflash/merged_firmware.bin">Download merged_firmware.bin</a></li>
+        <li><a href="https://espressif.github.io/esptool-js/">Go to the ESP Tool site</a></li>
+        <li>Click Connect</li>
+        <li>Choose your serial port when the browser asks</li>
+        <li>Click Choose File and select merged_firmware.bin</li>
+        <li>Set Flash Address to 0</li>
+        <li>Click Program</li>
+        <li>If your ESP32 does not restart automatically:
+            <ul style="list-style-type: none; padding-left: 20px;">
+                <li>Unplug the ESP32 and plug it back in</li>
+                <li>&nbsp;&nbsp;&nbsp;&nbsp;OR</li>
+                <li>Click Start, choose your serial port when the browser asks, and click Reset</li>
+            </ul>
+        </li>
+    </ul>
+    <br>
+</body>
+</html>

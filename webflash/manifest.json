@@ -1,0 +1,14 @@
+{
+  "name": "SmartNoticeButton",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "improv": false,
+      "parts": [
+        { "path": "merged_firmware.bin", "offset": 0 }
+      ]
+    }
+  ]
+}
+
