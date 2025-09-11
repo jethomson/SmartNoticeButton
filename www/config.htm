@@ -103,7 +103,13 @@
   <a id="return_main_menu" href="index.htm"><svg height="24px" width="24px" viewBox="0 0 16 16" id="Layer_1" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><path fill="white" d="M15.45,7L14,5.551V2c0-0.55-0.45-1-1-1h-1c-0.55,0-1,0.45-1,1v0.553L9,0.555C8.727,0.297,8.477,0,8,0S7.273,0.297,7,0.555  L0.55,7C0.238,7.325,0,7.562,0,8c0,0.563,0.432,1,1,1h1v6c0,0.55,0.45,1,1,1h3v-5c0-0.55,0.45-1,1-1h2c0.55,0,1,0.45,1,1v5h3  c0.55,0,1-0.45,1-1V9h1c0.568,0,1-0.437,1-1C16,7.562,15.762,7.325,15.45,7z"/></svg></a>
 
   <h3>Enter your configuration data here.</h3>
-  <h5>If a field is left blank the previously saved value for that field will not be overwritten.</h5>
+  <h5>
+  Previously saved values will be filled in automatically, but may take a moment to load.<br>
+  If a field is left blank the previously saved value for that field will not be overwritten by Save.<br>
+  Setting the timezone will be easier after your device is connected to the WiFi.<br>
+  If the IANA Timezone is blank it will be filled in automatically based on your IP address.<br>
+  The POSIX Timezone is derived from the IANA Timezone.
+  </h5>
 
   <form id="save_config" action="/save_config" method="post"></form>
   <div class="grid-container">
@@ -134,6 +140,9 @@
     <label>http://</label>
     <input id="mdns_host" form="save_config" name="mdns_host" type="text" autocapitalize="none" maxlength="30" autocomplete="off">
     <label>.local</label>
+
+    <label class="item-a">Num LEDs</label>
+    <input id="num_leds" class="wide-input" form="save_config" placeholder="enter number of LEDs here" name="num_leds" type="number" pattern="[0-9]*" min=1 autocomplete="off">
 
     <label class="item-a">IANA Timezone</label>
     <input id="iana_tz" class="wide-input" form="save_config" placeholder="enter IANA timezone here" name="iana_tz" onchange="handle_iana_tz_change(false)" autocomplete="off">
@@ -272,28 +281,26 @@ async function create_voice_options() {
     let optgroups = json["og"];
     if (optgroups) {
         voice_options_html += `
-  <optgroup id="v" label="Voices">`;
+    <optgroup id="v" label="Voices"></optgroup>`; // nested optgroups are not allowed so use a closing tag now instead of wrapping all of the following options.
       for (let i = 0; i < optgroups.length; i++) {
         let optgroup = optgroups[i];
         voice_options_html += `
-    <optgroup label="&nbsp;&nbsp;${optgroup['l']}">`;
+      <optgroup label="&nbsp;&nbsp;${optgroup['l']}">`;
         let options = optgroup['o'];
         for (let j = 0; j < options.length; j++) {
           let option = options[j];
           if (option['t'] === default_voice) {
             voice_options_html += `
-      <option value="${option['t']}" selected="selected">&nbsp;&nbsp;${option['t']}</option>`;
+        <option value="${option['t']}" selected="selected">&nbsp;&nbsp;${option['t']}</option>`;
           }
           else {
             voice_options_html += `
-      <option value="${option['t']}">&nbsp;&nbsp;${option['t']}</option>`;
+        <option value="${option['t']}">&nbsp;&nbsp;${option['t']}</option>`;
           }
         }
         voice_options_html += `
-    </optgroup>`;
+      </optgroup>`;
       }
-        voice_options_html += `
-  </optgroup>`;
     }
   })
   .catch((error) => {
@@ -372,13 +379,14 @@ async function get_config() {
 
   document.getElementById("ssid").value = data["ssid"];
   document.getElementById("mdns_host").value = data["mdns_host"];
+  document.getElementById("num_leds").value = data["num_leds"];
   document.getElementById("tts_api_key").value = data["tts_api_key"];
 }
 
 
 async function run() {
   get_wifi_networks();
-  get_config(); 
+  get_config();
 
   create_voice_options();
 
