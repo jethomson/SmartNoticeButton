@@ -52,7 +52,6 @@
 #define MDNS_HOSTNAME "smartbutton"
 
 #define DATA_PIN 16
-#define NUM_LEDS 15
 #define COLOR_ORDER GRB
 #define LED_STRIP_VOLTAGE 5
 #define LED_STRIP_MILLIAMPS 270
@@ -66,6 +65,8 @@
 #define SOUND_SIZE 101
 #define VOICE_SIZE 15 // longest voice string for voicerss: fr-ca&v=Olivia
 
+#define SENTINEL_EVENT_ID -1 // event.id is always non-negative, so -1 indicates never seen
+
 #undef DEBUG_CONSOLE
 #define DEBUG_CONSOLE Serial
 #if defined DEBUG_CONSOLE && !defined DEBUG_PRINTLN
@@ -74,12 +75,14 @@
   #define DEBUG_PRINTDEC(x)     DEBUG_PRINT (x, DEC)
   #define DEBUG_PRINTLN(x)  DEBUG_CONSOLE.println (x)
   #define DEBUG_PRINTF(...) DEBUG_CONSOLE.printf(__VA_ARGS__)
+  #define DEBUG_FLUSH()     DEBUG_CONSOLE.flush ()
 #else
   #define DEBUG_BEGIN(x)
   #define DEBUG_PRINT(x)
   #define DEBUG_PRINTDEC(x)
   #define DEBUG_PRINTLN(x)
   #define DEBUG_PRINTF(...)
+  #define DEBUG_FLUSH()
 #endif
 
 struct Timezone {
@@ -103,14 +106,18 @@ bool dns_up = false;
 
 bool restart_needed = false;
 
-CRGB leds[NUM_LEDS];
+// any changes to NUM_LEDS here will be overwritten
+// NUM_LEDS set in the frontend
+// and DEFAULT_NUM_LEDS set in platformio.ini
+uint16_t NUM_LEDS = 0;
+CRGB* leds;
 uint8_t homogenized_brightness = 255;
 
 bool is_audio_message_queued = false;
 Button2 button;
 
 struct Event {
-  uint32_t id;
+  uint16_t id;
   struct tm datetime;
   char frequency;
   struct tm end_datetime;
@@ -124,7 +131,6 @@ struct Event {
 };
 
 std::vector<Event> events;
-uint32_t next_available_event_id = 0;
 bool events_reload_needed = false;
 
 struct AudioMessage {
@@ -161,24 +167,40 @@ uint8_t num_special_colors = 0;
 String patterns_json;
 String special_colors_json;
 
-void homogenize_brightness();
 bool is_wait_over(uint16_t interval);
 bool finished_waiting(uint16_t interval);
+void homogenize_brightness(void);
+void show(void);
 
-void show();
-void breathing(uint16_t interval);
-void visual_notifier();
+void breathing(uint16_t draw_interval);
+void blink(uint16_t draw_interval, uint8_t num_blinks, uint8_t num_intervals_off);
+//void orbit(uint16_t draw_interval, CRGB rgb, int8_t delta);
+//uint16_t forwards(uint16_t index);
+uint16_t backwards(uint16_t index);
+void spin(uint16_t draw_interval, uint16_t(*dfp)(uint16_t));
+void twinkle(uint16_t draw_interval);
+void noise(uint16_t draw_interval);
+void fill(uint32_t color);
+void visual_reset(void);
+void visual_notifier(void);
 
-void status_callback(void *cbData, int code, const char *string);
+//void status_callback(void *cbData, int code, const char *string);
 void play(AudioFileSource* file);
+bool is_valid_mp3_URL(const char* url);
+void http_sound(const char* url);
 void tell(const char* description, const char* voice, time_t timestamp, bool do_long_notify);
-void sound(String filename);
+void file_sound(String filename);
 void aural_notifier(void* parameter);
+
+bool create_patterns_list(void);
+bool create_special_colors_list(void);
 
 void fill_in_datetime(tm* datetime);
 tm refresh_datetime(tm datetime, char frequency);
-bool load_events_file();
-bool save_file(String fs_path, String json, String* message);
+bool is_expired(tm datetime, tm end_datetime);
+uint16_t new_id(void);
+bool load_events_file(void);
+bool save_file(String fs_path, String json, String& message);
 void check_for_recent_events(uint16_t interval);
 
 void single_click_handler(Button2& b);
@@ -189,7 +211,7 @@ void espDelay(uint32_t ms);
 bool attempt_connect(void);
 String get_ip(void);
 String get_mdns_addr(void);
-String processor(const String& var);
+//String processor(const String& var);
 void wifi_AP(void);
 bool wifi_connect(void);
 void mdns_setup(void);
@@ -237,7 +259,7 @@ bool finished_waiting(uint16_t interval) {
 // homogenize_brightness() learns the lowest brightness level of all the animations and uses it across every animation to keep a consistent
 // brightness level. This will lead to dimmer animations and power usage almost always a good bit lower than what the FastLED power
 // management function was set to aim for. Set the #define for HOMOGENIZE_BRIGHTNESS to false to disable this feature.
-void homogenize_brightness() {
+void homogenize_brightness(void) {
     uint8_t max_brightness = calculate_max_brightness_for_power_vmA(leds, NUM_LEDS, homogenized_brightness, LED_STRIP_VOLTAGE, LED_STRIP_MILLIAMPS);
     if (max_brightness < homogenized_brightness) {
         homogenized_brightness = max_brightness;
@@ -245,11 +267,12 @@ void homogenize_brightness() {
 }
 
 
-void show() {
+void show(void) {
   homogenize_brightness();
   //FastLED.setBrightness(homogenized_brightness);
   FastLED.show();
 }
+
 
 uint8_t br_delta = 0;
 void breathing(uint16_t draw_interval) {
@@ -266,6 +289,7 @@ void breathing(uint16_t draw_interval) {
   }
 }
 
+
 uint8_t bl_count = 0;
 void blink(uint16_t draw_interval, uint8_t num_blinks, uint8_t num_intervals_off) {
   if (finished_waiting(draw_interval)) {
@@ -280,36 +304,40 @@ void blink(uint16_t draw_interval, uint8_t num_blinks, uint8_t num_intervals_off
   }
 }
 
-uint16_t or_pos = NUM_LEDS;
-uint8_t or_loop_num = 0;
-void orbit(uint16_t draw_interval, CRGB rgb, int8_t delta) {
-  if (finished_waiting(draw_interval)) {
-    //fadeToBlackBy(leds, NUM_LEDS, 20);
 
-    if (delta > 0) {
-      or_pos = or_pos % NUM_LEDS;
-    }
-    else {
-      // pos underflows after it goes below zero
-      if (or_pos > NUM_LEDS-1) {
-        or_pos = NUM_LEDS-1;
-      }
-    }
+//uint16_t or_pos = NUM_LEDS;
+//uint8_t or_loop_num = 0;
+//void orbit(uint16_t draw_interval, CRGB rgb, int8_t delta) {
+//  if (finished_waiting(draw_interval)) {
+//    //fadeToBlackBy(leds, NUM_LEDS, 20);
+//
+//    if (delta > 0) {
+//      or_pos = or_pos % NUM_LEDS;
+//    }
+//    else {
+//      // pos underflows after it goes below zero
+//      if (or_pos > NUM_LEDS-1) {
+//        or_pos = NUM_LEDS-1;
+//      }
+//    }
+//
+//    leds[or_pos] = rgb;
+//    or_pos = or_pos + delta;
+//
+//    or_loop_num = (or_pos == NUM_LEDS) ? or_loop_num+1 : or_loop_num; 
+//  }
+//}
+ 
 
-    leds[or_pos] = rgb;
-    or_pos = or_pos + delta;
+//uint16_t forwards(uint16_t index) {
+//  return index;
+//}
 
-    or_loop_num = (or_pos == NUM_LEDS) ? or_loop_num+1 : or_loop_num; 
-  }
-}
-
-uint16_t forwards(uint16_t index) {
-  return index;
-}
 
 uint16_t backwards(uint16_t index) {
   return (NUM_LEDS-1)-index;
 }
+
 
 void spin(uint16_t draw_interval, uint16_t(*dfp)(uint16_t)) {
   // count was an experiment to try to fix the disjoint in the animation cause by the USB hole
@@ -388,7 +416,6 @@ void fill(uint32_t color) {
     else {
       CRGB color1 = CRGB::Black;
       CRGB color2 = CRGB::Pink;
-      uint8_t endhue = HUE_GREEN;
       if (color == RED_GREEN) {
         color1 = CRGB::Red;
         color2 = CRGB::Green;
@@ -422,11 +449,11 @@ void fill(uint32_t color) {
 }
 
 
-void visual_reset() {
+void visual_reset(void) {
   br_delta = 0;
   bl_count = 0;
-  or_pos = NUM_LEDS;
-  or_loop_num = 0;
+  //or_pos = NUM_LEDS;
+  //or_loop_num = 0;
   finished_waiting(0); // effectively resets timer used for visual effects
   FastLED.clear();
 }
@@ -434,13 +461,17 @@ void visual_reset() {
 
 // last_id_seen needs to be global so it can be set back to the default by long_click_handler()
 // otherwise a reoccurrence of an event with the same id as last_id_seen may not be shown.
-uint32_t last_id_seen = 0; // an id of 0 is never used so a last_id_seen of 0 indicates never seen
-void visual_notifier() {
+int32_t last_id_seen = SENTINEL_EVENT_ID; // event.id is always non-negative, so last_id_seen of -1 indicates never seen
+void visual_notifier(void) {
   const uint32_t SHOW_TIME = 4000; // milliseconds
   static uint16_t i = 0;
   static uint32_t pm = 0;
   static bool refill = true;
   if (!events.empty()) {
+    if (i >= events.size()) {
+      // if an event was deleted i might be greater than the number of events, so reset it.
+      i = 0;
+    }
     struct Event event = events[i];
     if (event.timestamp != 0) {
       // if timestamp is 0 then event has not happened since last time notices were cleared
@@ -468,7 +499,6 @@ void visual_notifier() {
         bool do_basic = randomness % 3;
 
         if (do_basic) {
-          //color = (uint32_t)((CRGB)CHSV((randomness % 255), 255, 255)) & 0x00FFFFFF;
           color = (uint32_t)(CRGB)CHSV((randomness % 255), 255, 255);
           color &= 0x00FFFFFF; // make sure the upper bits are zero to indicate a basic color
         }
@@ -480,17 +510,15 @@ void visual_notifier() {
 
       // for DEBUGGING
       //if (refill) {
-      //  Serial.print("description: ");
-      //  Serial.println(event.description);
-      //  Serial.print("pattern: ");
-      //  Serial.println(pattern);
+      //  DEBUG_PRINT("description: ");
+      //  DEBUG_PRINTLN(event.description);
+      //  DEBUG_PRINT("pattern: ");
+      //  DEBUG_PRINTLN(pattern);
 
-      //  CRGB tmpcolor = CHSV((randomness % 255), 255, 255);
-      //  Serial.println((uint32_t)tmpcolor, HEX);
-      //  Serial.print("color: ");
+      //  DEBUG_PRINT("color: ");
       //  char hex_color[11];
       //  snprintf(hex_color, sizeof(hex_color), "0x%08lX", color);
-      //  Serial.println(hex_color);
+      //  DEBUG_PRINTLN(hex_color);
       //}
 
       switch (pattern) {
@@ -521,6 +549,7 @@ void visual_notifier() {
           if (refill) {
             refill = false;
             if (color <= 0x00FFFFFF) {
+              // basic color is paired with black to show spinning
               CRGB color_dim = color;
               //color_dim.nscale8(160); // lower numbers are closer to black
               color_dim.nscale8(80); // lower numbers are closer to black
@@ -530,7 +559,8 @@ void visual_notifier() {
               fill(color);
             }
           }
-          spin(150, &backwards);
+          // complete rotation about every 2 seconds independent of the number of LEDs
+          spin(2000/NUM_LEDS, &backwards);
           break;
         case TWINKLE:
           FastLED.setBrightness(homogenized_brightness);
@@ -550,10 +580,13 @@ void visual_notifier() {
       i = (i+1) % events.size();
     }
 
+    show();
   }
-
-  show();
+  // might not be a bad idea to use else{} and call visual_reset() if the events list is empty to be safe
+  // but it would be called every iteration of loop() when events list is empty
 }
+
+
 
 // Called when there's a warning or error (like a buffer underflow or decode hiccup)
 //void StatusCallback(void *cbData, int code, const char *string)
@@ -563,8 +596,8 @@ void visual_notifier() {
 //  char s1[64];
 //  strncpy_P(s1, string, sizeof(s1));
 //  s1[sizeof(s1)-1]=0;
-//  Serial.printf("STATUS(%s) '%d' = '%s'\n", ptr, code, s1);
-//  Serial.flush();
+//  DEBUG_PRINTF("STATUS(%s) '%d' = '%s'\n", ptr, code, s1);
+//  DEBUG_FLUSH();
 //}
 
 //https://github.com/earlephilhower/ESP8266Audio/issues/406
@@ -591,7 +624,7 @@ void play(AudioFileSource* file) {
   // if the validity of the mp3 is not checked ESP8266Audio can get stuck in loop() causing a watchdog timer reboot.
   //if (file->getSize() > 100000 || !((magic_numbers[0] == 0x49 && magic_numbers[1] == 0x44 && magic_numbers[2] == 0x33) || (magic_numbers[0] == 0xFF && magic_numbers[1] == 0xFB)) ) {
   //if (file->getSize() > 100000) {
-  //  Serial.println("Invalid MP3.");
+  //  DEBUG_PRINTLN("Invalid MP3.");
   //  return;
   //}
 
@@ -599,17 +632,17 @@ void play(AudioFileSource* file) {
 
   static int lastms = 0;
   while (true) {
-    if (mp3->isRunning()) {
+    if (mp3 && mp3->isRunning()) {
       if (millis()-lastms > 1000) {
         lastms = millis();
-        Serial.printf("Running for %d ms...\n", lastms);
-        Serial.flush();
+        DEBUG_PRINTF("%d ms: mp3 is running...\n", lastms);
+        DEBUG_FLUSH();
         vTaskDelay(pdMS_TO_TICKS(5));
       }
       if (!mp3->loop()) {
         mp3->stop();
-        Serial.println("Finished playing.");
-        Serial.flush();
+        DEBUG_PRINTLN("Finished playing.");
+        DEBUG_FLUSH();
         break;
       }
     }
@@ -620,12 +653,60 @@ void play(AudioFileSource* file) {
   buff->close();
 }
 
+bool is_valid_mp3_URL(const char* url) {
+  bool retval = false;
+  // ESP8266Audio will hang if it is passed a bad mp3 URL, so verify the URL is good by doing a HEAD request first.
+  HTTPClient http;
+  //http.setUserAgent("Mozilla/5.0 (ESP32)");
+  http.begin(url);
+
+  //const char* headers_keys[] = {"Content-Type", "Content-Length"};
+  const char* headers_keys[] = {"Content-Type"};
+  size_t header_count = sizeof(headers_keys) / sizeof(headers_keys[0]);
+  http.collectHeaders(headers_keys, header_count);
+  int http_code = http.sendRequest("HEAD");
+
+  if (http_code > 0) {
+    // voicerss.org returns 200 even on error
+    // error: Content-Type: text/plain; charset=utf-8 | Content-Length: not set so getSize() returns -1
+    // success: Content-Type: audio/mpeg | Content-Length: body size
+    String content_type = http.header("Content-Type");
+    if (http_code == 200 && content_type == "audio/mpeg") {
+      retval = true;
+    }
+    else {
+      DEBUG_PRINTLN("Server did not return an mp3. Invalid API key?");
+    }
+  }
+  else {
+    DEBUG_PRINTLN("Connecting to mp3 server failed.");
+  }
+
+  http.end();
+  return retval;
+}
+
 
 AudioFileSourceHTTPStream *http_mp3_file = new AudioFileSourceHTTPStream();
+void http_sound(const char* url) {
+  DEBUG_PRINT("http_sound(): ");
+  DEBUG_PRINTLN(url);
+  if (is_valid_mp3_URL(url)) {
+    http_mp3_file->open(url);
+    play(http_mp3_file);
+    http_mp3_file->close();
+  }
+}
+
+
 void tell(const char* description, const char* voice, time_t timestamp, bool do_long_notify) {
   preferences.begin("config", true);
   String tts_api_key = preferences.getString("tts_api_key", ""); 
   preferences.end();
+  if (tts_api_key == "") {
+    DEBUG_PRINTLN("Cannot use TTS server without an API key.");
+    return;
+  }
 
   //tts_api_key      ::  32 (01234567890123456789012345678901)
   //voice            ::  14 (fr-ca&v=Olivia)
@@ -634,17 +715,13 @@ void tell(const char* description, const char* voice, time_t timestamp, bool do_
   //datetime.tm_min  ::   2 (00)
   //datetime.tm_sec  ::   2 (00)
   //http://api.voicerss.org/?key=01234567890123456789012345678901&hl=fr-ca&v=Olivia&r=-2&c=MP3&f=24khz_8bit_mono&src=012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789 occurred at 00 hours, 00 minutes, and 00 seconds\0
-  // the URL has 463 characters including the string terminator. this is assuming the worst case where the description is 300 characters long.
-  //uint16_t url_buffsize = 463*sizeof(char);
-  //uint16_t url_buffsize = 29 + tts_api_key.length() + 4 + VOICE_SIZE-1 + 34 + DESCRIPTION_SIZE-1 + 1;
-  uint16_t url_buffsize = 29 + tts_api_key.length() + 4 + strlen(voice) + 34 + strlen(description) + 1;
+  // the URL has max 463 characters including the string terminator. this is assuming the worst case where the description is 300 characters long.
+
   char* url;
   if (!do_long_notify) {
-    url = (char *)malloc(url_buffsize);
-    if (url == NULL) {
-      return;
-    }
-    snprintf(url, url_buffsize, "http://api.voicerss.org/?key=%s&hl=%s&r=-2&c=MP3&f=24khz_8bit_mono&src=%s", tts_api_key.c_str(), voice, description);
+    size_t buffsize = snprintf(nullptr, 0, "http://api.voicerss.org/?key=%s&hl=%s&r=-2&c=MP3&f=24khz_8bit_mono&src=%s", tts_api_key.c_str(), voice, description);
+    url = new char[buffsize + 1];
+    snprintf(url, buffsize + 1, "http://api.voicerss.org/?key=%s&hl=%s&r=-2&c=MP3&f=24khz_8bit_mono&src=%s", tts_api_key.c_str(), voice, description);
   }
   else {
     struct tm event_time = {0};
@@ -662,45 +739,26 @@ void tell(const char* description, const char* voice, time_t timestamp, bool do_
       sunit = "second";
     }
 
-    url_buffsize += 24 + strlen(hunit) + strlen(munit) + strlen(sunit) + 2 + 2 + 2;
-    url = (char *)malloc(url_buffsize);
-    if (url == NULL) {
-      return;
-    }
-    snprintf(url, url_buffsize, "http://api.voicerss.org/?key=%s&hl=%s&r=-2&c=MP3&f=24khz_8bit_mono&src=%s+occurred+at+%i+%s,+%i+%s,+and+%i+%s", tts_api_key.c_str(), voice, description, event_time.tm_hour, hunit, event_time.tm_min, munit, event_time.tm_sec, sunit);
+    size_t buffsize = snprintf(nullptr, 0, "http://api.voicerss.org/?key=%s&hl=%s&r=-2&c=MP3&f=24khz_8bit_mono&src=%s+occurred+at+%i+%s,+%i+%s,+and+%i+%s", tts_api_key.c_str(), voice, description, event_time.tm_hour, hunit, event_time.tm_min, munit, event_time.tm_sec, sunit);
+    url = new char[buffsize + 1];
+    snprintf(url, buffsize + 1, "http://api.voicerss.org/?key=%s&hl=%s&r=-2&c=MP3&f=24khz_8bit_mono&src=%s+occurred+at+%i+%s,+%i+%s,+and+%i+%s", tts_api_key.c_str(), voice, description, event_time.tm_hour, hunit, event_time.tm_min, munit, event_time.tm_sec, sunit);
   }
 
-  Serial.println(url);
-  http_mp3_file->open(url);
-  free(url);
-  play(http_mp3_file);
-  http_mp3_file->close();
+  http_sound(url);
+  delete[] url;
 }
-
 
 
 //AudioFileSourceSPIFFS *sound_file = new AudioFileSourceSPIFFS();
-void sound(const char* filename) {
-  uint16_t filepath_buffsize = 7 + strlen(filename) + 1;
-  char* filepath = (char *)malloc(filepath_buffsize);
-  if (filepath == NULL) {
-    return;
-  }
-  snprintf(filepath, filepath_buffsize, "/files/%s", filename);
+void file_sound(const char* filename) {
+  size_t buffsize = snprintf(nullptr, 0, "/files/%s", filename);
+  char* filepath = new char[buffsize + 1];
+  snprintf(filepath, buffsize + 1, "/files/%s", filename);
   AudioFileSourceSPIFFS *sound_file = new AudioFileSourceSPIFFS();
   sound_file->open(filepath);
-  free(filepath);
+  delete[] filepath;
   play(sound_file);
   sound_file->close();
-}
-
-
-void http_sound(const char* url) {
-  Serial.print("http_sound(): ");
-  Serial.println(url);
-  http_mp3_file->open(url);
-  play(http_mp3_file);
-  http_mp3_file->close();
 }
 
 
@@ -708,7 +766,6 @@ void aural_notifier(void* parameter) {
   static uint16_t i = 0;
   for (;;) {
     vTaskDelay(pdMS_TO_TICKS(5));
-    //continue;
     struct AudioMessage am;
     if (xQueueReceive(qaudio_messages, (void *)&am, 0) == pdTRUE) {
       is_audio_message_queued = true;
@@ -719,7 +776,7 @@ void aural_notifier(void* parameter) {
           http_sound(am.sound);
         }
         else {
-          sound(am.sound);
+          file_sound(am.sound);
         }
         vTaskDelay(pdMS_TO_TICKS(750));
       }
@@ -737,12 +794,18 @@ void aural_notifier(void* parameter) {
   vTaskDelete(NULL);
 }
 
+
+// create_patterns_list() and create_special_colors_list() make development easier, but once you are happy with the patterns
+// and special colors you may wish to copy their resulting output and hardcode the JSON to their respective variables in setup()
+// in place of running these functions.
+//
 // creating the patterns list procedurally rather than hardcoding it allows for rearranging and adding to the patterns that appear
 // in the frontend more easily. this function creates the list based on what is in the enum Pattern, so changes to that enum
 // are reflected here. assigning a new number to the pattern will change where the pattern falls in the list sent to the frontend.
 // setting the pattern to a number of 50 or greater will remove it from the list sent to the frontend.
 // if a new pattern is created a new case pattern_name will still need to be set here.
 bool create_patterns_list(void) {
+  const uint8_t pattern_limit = 50;
   static Pattern pattern_value = static_cast<Pattern>(0);
   String pattern_name;
   bool match = false;
@@ -751,10 +814,10 @@ bool create_patterns_list(void) {
   switch(pattern_value) {
     default:
         // up to 50 patterns. not every number between 0 and 49 needs to represent a pattern.
-        // doing it like this makes it easy to add more patterns
+        // doing it like this makes it easy to add more patterns or remove them by commenting them out. 
         // the upper limit of 50 is arbitrary, it could be increased up to 254
         // 255 is used to indicate a pattern be randomly chosen by the backend
-        if (pattern_value >= 50) {
+        if (pattern_value >= pattern_limit) {
           pattern_value = static_cast<Pattern>(0);
           finished = true;
         }
@@ -786,11 +849,11 @@ bool create_patterns_list(void) {
     if (!first) {
       patterns_json += ",";
     }
-    patterns_json += "{\"n\":\"";
-    patterns_json += pattern_name;
-    patterns_json += "\",\"v\":";
-    patterns_json += pattern_value;
-    patterns_json += "}";
+    size_t buffsize = snprintf(nullptr, 0, "{\"n\":\"%s\",\"v\":\"%d\"}", pattern_name.c_str(), pattern_value);
+    char* item = new char[buffsize + 1];
+    snprintf(item, buffsize + 1, "{\"n\":\"%s\",\"v\":\"%d\"}", pattern_name.c_str(), pattern_value);
+    patterns_json += item;
+    delete[] item;
     first = false;
   }
   if (!finished) {
@@ -799,15 +862,22 @@ bool create_patterns_list(void) {
   return finished;
 }
 
+
+// this is based on the same principles as create_patterns_list() refer to its comments
 bool create_special_colors_list(void) {
+  const uint32_t special_color_limit = 0x01000032; // 50 base ten is 0x32 in hex
+  //const uint32_t special_color_limit = 0x0100000A; // 10 base ten is 0xA in hex
   static SpecialColor special_color_value = static_cast<SpecialColor>(0x01000000);
-  String special_color_name;
+  std::string special_color_name;
   bool match = false;
   static bool first = true;
   bool finished = false;
   switch(special_color_value) {
     default:
-        if (special_color_value >= 0x01000032) { // 50 base ten is 0x32 in hex
+        // up to 50 special colors. not every number between 0 and 49 needs to represent a special color.
+        // doing it like this makes it easy to add more special colors or remove them by commenting them out. 
+        // the upper limit of 50 is arbitrary
+        if (special_color_value >= special_color_limit) {
           special_color_value = static_cast<SpecialColor>(0x01000000);
           finished = true;
         }
@@ -834,14 +904,11 @@ bool create_special_colors_list(void) {
     if (!first) {
       special_colors_json += ",";
     }
-    char special_color_value_string[11];
-    snprintf(special_color_value_string, sizeof(special_color_value_string), "0x%08lX", special_color_value);
-    special_colors_json += "{\"n\":\"";
-    special_colors_json += special_color_name;
-    special_colors_json += "\",\"v\":";
-    special_colors_json += "\"";
-    special_colors_json += special_color_value_string;
-    special_colors_json += "\"}";
+    size_t buffsize = snprintf(nullptr, 0, "{\"n\":\"%s\",\"v\":\"0x%08lx\"}", special_color_name.c_str(), special_color_value);
+    char* item = new char[buffsize + 1];
+    snprintf(item, buffsize + 1, "{\"n\":\"%s\",\"v\":\"0x%08lx\"}", special_color_name.c_str(), special_color_value);
+    special_colors_json += item;
+    delete[] item;
     first = false;
   }
   if (!finished) {
@@ -850,10 +917,12 @@ bool create_special_colors_list(void) {
   return finished;
 }
 
+
 void fill_in_datetime(tm* _datetime) {
   time_t t = mktime(_datetime);
   localtime_r(&t, _datetime); // tm_wday, tm_yday, and tm_isdst are filled in with the proper values
 }
+
 
 // updates recurring events, so the next occurrence is in the future.
 tm refresh_datetime(tm datetime, char frequency) {
@@ -862,18 +931,15 @@ tm refresh_datetime(tm datetime, char frequency) {
   time_t now;
   time(&now);
   localtime_r(&now, &local_now);
-  //Serial.printf("local:     %s", asctime(&local_now));
-  //Serial.printf("datetime:     %s", asctime(&datetime));
+  //DEBUG_PRINTF("local:     %s", asctime(&local_now));
+  //DEBUG_PRINTF("datetime:     %s", asctime(&datetime));
   
   next_event = datetime;
   next_event.tm_isdst = -1; // A negative value of tm_isdst causes mktime to attempt to determine if Daylight Saving Time was in effect in the specified time. 
-  //Serial.printf("1) next_event:     %s", asctime(&next_event));
+  //DEBUG_PRINTF("1) next_event:     %s", asctime(&next_event));
 
   time_t tnow = mktime(&local_now);
   time_t t2 = mktime(&next_event);
-  //unsetenv("TZ");
-  //setenv("TZ", timezone, 1);
-  //tzset();
   if (t2 <= tnow) {
     /*
     // this seems unnessary since we set next_event = datetime above
@@ -979,14 +1045,6 @@ tm refresh_datetime(tm datetime, char frequency) {
   t2 = mktime(&next_event);
   if (t2 <= tnow) {
     // if still in the past set it to the Unix Epoch to make it clear the event no longer occurs
-    //next_event.tm_sec = 0;
-    //next_event.tm_min = 0;
-    //next_event.tm_hour = 0;
-    //next_event.tm_mday = 1;
-    //next_event.tm_mon = 0;
-    //next_event.tm_year = 70;
-    //next_event.tm_isdst = 0; // no DST. necessary for mktime() to give the exact Unix Epoch
-
     // no DST. necessary for mktime() to give the exact Unix Epoch
     next_event = {.tm_sec = 0, .tm_min = 0, .tm_hour = 0, .tm_mday = 1, .tm_mon = 0, .tm_year = 70, .tm_wday = 4, .tm_yday = 0, .tm_isdst = 0};
     t2 = mktime(&next_event);
@@ -994,13 +1052,14 @@ tm refresh_datetime(tm datetime, char frequency) {
   localtime_r(&t2, &next_event); // tm_wday, tm_yday, and tm_isdst are filled in with the proper values
 
   // if updating the event causes it to cross a daylight saving begin or end time then tm_hour will be off by 1.
-  // to fix this we can process the event through mktime and localtime_r to get a well formed event
-  // since we just processed the event through mktime and localtime_r  the event should be well formed
+  // since we just processed the event through mktime and localtime_r the event should be well formed
   // so we can fix the off by one error by setting the hour back to the original hour pass to this function
   next_event.tm_hour = datetime.tm_hour;
 
+
   return next_event;
 }
+
 
 bool is_expired(tm datetime, tm end_datetime) {
   struct tm local_now = {0};
@@ -1016,13 +1075,13 @@ bool is_expired(tm datetime, tm end_datetime) {
   time_t tend = mktime(&end_datetime);
 
   if (tdt <= tnow) {
-    Serial.println("expired: in past");
+    DEBUG_PRINTLN("expired: in past");
     return true;
   }
 
   if (tdt >= tend && !(end_datetime.tm_year == 70 && end_datetime.tm_mon == 0 && end_datetime.tm_mday == 1)) {
     if (tdt >= tend) {
-      Serial.println("expired: after end date");
+      DEBUG_PRINTLN("expired: after end date");
       return true;
     }
   }
@@ -1031,8 +1090,21 @@ bool is_expired(tm datetime, tm end_datetime) {
 }
 
 
+uint16_t new_id(bool reset) {
+  static uint16_t next_id = 0;
+  if (reset) {
+    next_id = 0;
+    return next_id;
+  }
+  assert(next_id != UINT16_MAX); // if false, going to rollover on next call. this many events is not supported.
+  return next_id++;
+}
+
+
 bool load_events_file() {
   events.clear(); // does it make sense to clear even if the json file is unavailable or invalid?
+  (void)new_id(true); // reset
+  last_id_seen = SENTINEL_EVENT_ID;
 
   File file = LittleFS.open("/files/events.json", "r");
   
@@ -1040,7 +1112,6 @@ bool load_events_file() {
     return true;
   }
 
-  //DynamicJsonDocument doc(8192);
   DynamicJsonDocument doc(24576); // 25 events with description size of 300, sound size of 14, and voice size of 14
   ReadBufferingStream bufferedFile(file, 64);
   DeserializationError error = deserializeJson(doc, bufferedFile);
@@ -1074,12 +1145,8 @@ bool load_events_file() {
       datetime.tm_sec = event_time[2].as<uint8_t>();
       datetime.tm_isdst = -1;
 
-      // refresh_datetime() uses tm_wday so it needs to corrected before we pass datetime to refresh_datetime()
+      // refresh_datetime() uses tm_wday so it needs to be corrected before we pass datetime to refresh_datetime()
       fill_in_datetime(&datetime); // tm_wday, tm_yday, and tm_isdst are filled in with the proper values
-
-      // refresh_datetime() uses tm_wday so it needs to corrected before we pass datetime to refresh_datetime()
-      //time_t t = mktime(&datetime);
-      //localtime_r(&t, &datetime); // tm_wday, tm_yday, and tm_isdst are filled in with the proper values
 
       char frequency = 'o';
       if (!jevent[F("f")].isNull()) {
@@ -1095,14 +1162,15 @@ bool load_events_file() {
       if (!jevent[F("d")].isNull()) {
         description = jevent[F("d")];
       }
-      Serial.print("description: ");
-      Serial.println(description);
+      // this is the description from the frontend. if it is too long it will be shortened when stored in event.description
+      DEBUG_PRINT("description: ");
+      DEBUG_PRINTLN(description);
 
-      Serial.print("original datetime: ");
-      Serial.print(asctime(&datetime));
+      DEBUG_PRINT("original datetime: ");
+      DEBUG_PRINT(asctime(&datetime));
       datetime = refresh_datetime(datetime, frequency);
-      Serial.print("refreshed datetime: ");
-      Serial.print(asctime(&datetime));
+      DEBUG_PRINT("refreshed datetime: ");
+      DEBUG_PRINT(asctime(&datetime));
 
       struct tm end_datetime = {.tm_sec = 0, .tm_min = 0, .tm_hour = 0, .tm_mday = 1, .tm_mon = 0, .tm_year = 70, .tm_wday = 4, .tm_yday = 0, .tm_isdst = -1};
       JsonArray end_date = jevent[F("ed")];
@@ -1127,8 +1195,8 @@ bool load_events_file() {
       uint8_t exclude = 0;
       if (!jevent[F("e")].isNull()) {
         exclude = jevent[F("e")].as<uint8_t>();
-        Serial.print("exclude: ");
-        Serial.println(exclude);
+        DEBUG_PRINT("exclude: ");
+        DEBUG_PRINTLN(exclude);
       }
 
       uint8_t pattern = 0;
@@ -1156,7 +1224,9 @@ bool load_events_file() {
 
 
       struct Event event;
-      event.id = next_available_event_id++; // an id of 0 is never used
+      event.id = new_id(false);
+      DEBUG_PRINT("event.id: ");
+      DEBUG_PRINTLN(event.id);
       event.datetime = datetime;
       event.frequency = frequency;
       event.end_datetime = end_datetime;
@@ -1169,8 +1239,17 @@ bool load_events_file() {
       event.timestamp = 0;
       events.push_back(event);
 
-      Serial.print("event put on schedule: ");
-      Serial.println(asctime(&datetime));
+      // all of this is for outputting debuggin info and is not required
+      struct tm local_now = {0};
+      time_t now;
+      time(&now);
+      localtime_r(&now, &local_now);
+      time_t tnow = mktime(&local_now);
+      time_t t2 = mktime(&datetime);
+      DEBUG_PRINT("seconds remaining: ");
+      DEBUG_PRINTLN(difftime(t2, tnow));
+      DEBUG_PRINT("event put on schedule: ");
+      DEBUG_PRINTLN(asctime(&datetime));
     }
   }
   doc.clear(); // not sure if this is necessary.
@@ -1179,6 +1258,7 @@ bool load_events_file() {
 }
 
 
+/*
 bool save_file(String fs_path, String json, String* message) {
   if (fs_path == "") {
     if (message) {
@@ -1208,6 +1288,37 @@ bool save_file(String fs_path, String json, String* message) {
   }
   return true;
 }
+*/
+
+bool save_file(String fs_path, String json, String& message) {
+  if (fs_path == "") {
+    if (message) {
+      message = F("save_file(): Filename is empty. Data not saved.");
+    }
+    return false;
+  }
+
+  //create_dirs(fs_path.substring(0, fs_path.lastIndexOf("/")+1));
+  File f = LittleFS.open(fs_path, "w");
+  if (f) {
+    //noInterrupts();
+    f.print(json);
+    delay(1);
+    f.close();
+    //interrupts();
+  }
+  else {
+    if (message) {
+      message = F("save_file(): Could not open file.");
+    }
+    return false;
+  }
+
+  if (message) {
+    message = F("save_file(): Data saved.");
+  }
+  return true;
+}
 
 
 void check_for_recent_events(uint16_t interval) {
@@ -1219,19 +1330,6 @@ void check_for_recent_events(uint16_t interval) {
       struct tm local_now = {0};
       time(&now);
       localtime_r(&now, &local_now);
-
-      //unsetenv("TZ");
-      //setenv("TZ", "GMT0", 1);
-      //tzset();
-      //time_t t1 = mktime(&local_now);
-      //time_t t2 = mktime(&event.datetime);
-      //Serial.print("t1: ");
-      //Serial.println(t1);
-      //Serial.print("t2: ");
-      //Serial.println(t2);
-      //unsetenv("TZ");
-      //setenv("TZ", timezone, 1);
-      //tzset();
 
       time_t tnow = mktime(&local_now);
       time_t tevent = mktime(&events[i].datetime);
@@ -1259,7 +1357,7 @@ void check_for_recent_events(uint16_t interval) {
 
 
 void single_click_handler(Button2& b) {
-  Serial.println("single_click");
+  DEBUG_PRINTLN("single_click");
   if (!is_audio_message_queued) {
     for (uint16_t i = 0; i < events.size(); i++) {
       if (events[i].timestamp > 0) {
@@ -1278,27 +1376,28 @@ void single_click_handler(Button2& b) {
 
 
 void long_click_handler(Button2& b) {
-  Serial.println("long_click");
+  DEBUG_PRINTLN("long_click");
 
   for (uint16_t i = 0; i < events.size(); ) {
-    Serial.println(events[i].description);
+    DEBUG_PRINTLN(events[i].description);
     events[i].timestamp = 0;
     if (is_expired(events[i].datetime, events[i].end_datetime)) {
-      Serial.println("expired event deleted.");
+      DEBUG_PRINTLN("expired event deleted.");
       events.erase(events.begin()+i);
     }
     else {
-      // since erasing changes size an index only increment if event was not erased
+      // since erasing changes size of vector only increment index if event was not erased
       i++;
     }
   }
-  last_id_seen = 0;
+  last_id_seen = SENTINEL_EVENT_ID;
 
-  Serial.println("after");
+  DEBUG_PRINTLN("after");
   for (uint16_t i = 0; i < events.size(); i++) {
-    Serial.println(events[i].description);
+    DEBUG_PRINTLN(events[i].description);
   }
   FastLED.clear();
+  FastLED.show();
 }
 
 
@@ -1354,7 +1453,7 @@ bool verify_timezone(const String iana_tz) {
     delay (1);
     if (millis() - started > TIMEZONED_TIMEOUT) {
       udp.stop();  
-      Serial.println("verify_timezone(): fetch timezone timed out.");
+      DEBUG_PRINTLN("verify_timezone(): fetch timezone timed out.");
       return false;
     }
   }
@@ -1364,9 +1463,9 @@ bool verify_timezone(const String iana_tz) {
   recv.reserve(60);
   while (udp.available()) recv += (char)udp.read();
   udp.stop();
-  Serial.print(F("verify_timezone(): (round-trip "));
-  Serial.print(millis() - started);
-  Serial.println(F(" ms)  "));
+  DEBUG_PRINT(F("verify_timezone(): (round-trip "));
+  DEBUG_PRINT(millis() - started);
+  DEBUG_PRINTLN(F(" ms)  "));
   if (recv.substring(0,6) == "ERROR ") {
     _server_error = recv.substring(6);
     return false;
@@ -1377,7 +1476,7 @@ bool verify_timezone(const String iana_tz) {
     tz.posix_tz = recv.substring(recv.indexOf(" ", 4) + 1);
     return true;
   }
-  Serial.println("verify_timezone(): timezone not found.");
+  DEBUG_PRINTLN("verify_timezone(): timezone not found.");
   return false;
 }
 // end ezTime MIT licensed code
@@ -1398,6 +1497,7 @@ public:
     request->redirect(url);
   }
 };
+
 
 
 void espDelay(uint32_t ms) {
@@ -1428,18 +1528,6 @@ String get_mdns_addr(void) {
 }
 
 
-/*
-String processor(const String& var) {
-  preferences.begin("config", false);
-  if (var == "SSID")
-    return preferences.getString("ssid", "");
-  if (var == "MDNS_HOST")
-    return preferences.getString("mdns_host", "");
-  preferences.end();    
-  return String();
-}
-*/
-
 void wifi_AP(void) {
   DEBUG_PRINTLN(F("Entering AP Mode."));
   //WiFi.softAP(SOFT_AP_SSID, "123456789");
@@ -1457,14 +1545,14 @@ bool wifi_connect(void) {
 
   preferences.begin("config", false);
 
-  String ssid = preferences.getString("ssid", ""); 
-  String password = preferences.getString("password", "");
+  String ssid = preferences.getString("ssid", ""); // from using config.htm
+  String password = preferences.getString("password", ""); // from using config.htm
   //String ssid = wifi_ssid; // from credentials.h
   //String password = wifi_password; // from credentials.h
 
   DEBUG_PRINTLN(F("Entering Station Mode."));
   //if (!WiFi.config(LOCAL_IP, GATEWAY, SUBNET_MASK, DNS1, DNS2)) {
-  //  Serial.println("WiFi config failed.");
+  //  DEBUG_PRINTLN("WiFi config failed.");
   //}
   if (WiFi.SSID() != ssid.c_str()) {
     WiFi.mode(WIFI_STA);
@@ -1480,13 +1568,13 @@ bool wifi_connect(void) {
     IP = WiFi.localIP();
     DEBUG_PRINTLN(IP);
     success = true;
-  Serial.print("gateway: ");
-  Serial.println(WiFi.gatewayIP().toString());
-  Serial.print("DNS: ");
-  Serial.println(WiFi.dnsIP().toString());
+    DEBUG_PRINT("gateway: ");
+    DEBUG_PRINTLN(WiFi.gatewayIP().toString());
+    DEBUG_PRINT("DNS: ");
+    DEBUG_PRINTLN(WiFi.dnsIP().toString());
   }
   else {
-    DEBUG_PRINT(F(" Failed to connect to WiFi."));
+    DEBUG_PRINTLN(F("Failed to connect to WiFi."));
     preferences.putBool("create_ap", true);
     success = false;
   }
@@ -1519,20 +1607,16 @@ void web_server_station_setup(void) {
     int rc = 400;
     String message;
 
-    //String type = request->getParam("t", true)->value();
     String id = request->getParam("id", true)->value();
     String json = request->getParam("json", true)->value();
 
     if (id != "") {
-      //String fs_path = form_path(type, id);
       String fs_path = id;
-      if (id == "/files/events.json" && save_file(fs_path, json, &message)) {
-        //gfile_list_needs_refresh = true;
+      if (id == "/files/events.json" && save_file(fs_path, json, message)) {
         events_reload_needed = true;
         rc = 200;
       }
-      if (id == "/files/sound_URLs.json" && save_file(fs_path, json, &message)) {
-        //gfile_list_needs_refresh = true;
+      if (id == "/files/sound_URLs.json" && save_file(fs_path, json, message)) {
         rc = 200;
       }
     }
@@ -1568,9 +1652,9 @@ void web_server_station_setup(void) {
   web_server.onNotFound([](AsyncWebServerRequest *request) {
     if (request->method() == HTTP_OPTIONS) {
       request->send(200);
-    } else {
+    }
+    else {
       request->send(404, "text/plain", "404 - NOT FOUND");
-      //request->redirect("/"); // will cause redirect loop if request handlers are not set up properly
     }
   });
 }
@@ -1583,6 +1667,10 @@ void web_server_ap_setup(void) {
   // need to know the ESP's IP address.
   dns_up = dnsServer.start(53, "*", IP);
   web_server.addHandler(new CaptiveRequestHandler()).setFilter(filterOnNotLocal);
+
+  web_server.on("/voicerss.json", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send(LittleFS, "/www/voicerss.json");
+  });
 
   // want limited access when in AP mode. AP mode is just for WiFi setup.
   web_server.onNotFound([](AsyncWebServerRequest *request) {
@@ -1616,48 +1704,37 @@ void web_server_initiate(void) {
   });
 
   web_server.on("/get_ip", HTTP_GET, [](AsyncWebServerRequest *request) {
-    //char timezone_json[53];
-    //snprintf(timezone_json, sizeof(timezone_json), " occurred at %i hours, %i minutes, and %i seconds.", datetime.tm_hour, datetime.tm_min, datetime.tm_sec);
-    String ip_json = "{\"IP\":\"";
-    ip_json += get_ip();
-    ip_json += "\"}";
+    //example output: {"IP":"192.168.123.123"}
+    size_t buffsize = snprintf(nullptr, 0, "{\"IP\":\"%s\"}", get_ip().c_str());
+    char* ip_json = new char[buffsize + 1]; // +1 for null string terminator
+    snprintf(ip_json, buffsize + 1, "{\"IP\":\"%s\"}", get_ip().c_str());
     request->send(200, "application/json", ip_json);
+    delete[] ip_json;
   });
 
   web_server.on("/get_timezone", HTTP_GET, [](AsyncWebServerRequest *request) {
-    //char timezone_json[53];
-    //snprintf(timezone_json, sizeof(timezone_json), " occurred at %i hours, %i minutes, and %i seconds.", datetime.tm_hour, datetime.tm_min, datetime.tm_sec);
-    String timezone = "{\"is_default_tz\":";
-    String str_is_default_tz = (tz.is_default_tz) ? "true" : "false";
-    timezone += str_is_default_tz;
-    timezone += ",\"iana_tz\":\"";
-    timezone += tz.iana_tz;
-    timezone += "\",\"posix_tz\":\"";
-    timezone += tz.posix_tz;
-    timezone += "\"}";
-    request->send(200, "application/json", timezone);
+    //example output: {"is_default_tz":false,"iana_tz":"America/New_York","posix_tz":"EST5EDT,M3.2.0,M11.1.0"}
+    // notice that false is not wrapped in double quotes because it is a JSON boolean
+    std::string str_is_default_tz = (tz.is_default_tz) ? "true" : "false";
+    size_t buffsize = snprintf(nullptr, 0, "{\"is_default_tz\":%s,\"iana_tz\":\"%s\",\"posix_tz\":\"%s\"}", str_is_default_tz.c_str(), tz.iana_tz.c_str(), tz.posix_tz.c_str());
+    char* timezone_json = new char[buffsize + 1];
+    snprintf(timezone_json, buffsize + 1, "{\"is_default_tz\":%s,\"iana_tz\":\"%s\",\"posix_tz\":\"%s\"}", str_is_default_tz.c_str(), tz.iana_tz.c_str(), tz.posix_tz.c_str());
+    request->send(200, "application/json", timezone_json);
+    delete[] timezone_json;
   });
 
   web_server.on("/voicerss.json", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send(LittleFS, "/www/voicerss.json");
-    //preferences.begin("config", true);
-    //String tts_api_key = preferences.getString("tts_api_key", ""); 
-    //preferences.end();
-    //if (tts_api_key != "") {
-    //  request->send(LittleFS, "/www/voicerss.json");
-    //}
-    //else {
-    //  request->send(200, "application/json", "");
-    //}
   });
 
+  /*
   web_server.on("/get_default_voice", HTTP_GET, [](AsyncWebServerRequest *request) {
     preferences.begin("config", true);
     String config = "{\"tts_default_voice\":\"";
     config += preferences.getString("tts_dv", "");
     config += "\"}";
     preferences.end();
-    Serial.println(config);
+    DEBUG_PRINTLN(config);
     request->send(200, "application/json", config);
   });
 
@@ -1673,8 +1750,41 @@ void web_server_initiate(void) {
     config += preferences.getString("tts_dv", "");
     config += "\"}";
     preferences.end();
-    Serial.println(config);
+    DEBUG_PRINTLN(config);
     request->send(200, "application/json", config);
+  });
+  */
+
+  web_server.on("/get_default_voice", HTTP_GET, [](AsyncWebServerRequest *request) {
+    preferences.begin("config", true);
+    String default_voice = preferences.getString("tts_dv", "");
+    preferences.end();
+
+    char* default_voice_json;
+    size_t buffsize = snprintf(nullptr, 0, "{\"tts_default_voice\":\"%s\"}", default_voice.c_str());
+    default_voice_json = new char[buffsize + 1];
+    snprintf(default_voice_json, buffsize + 1, "{\"tts_default_voice\":\"%s\"}", default_voice.c_str());
+
+    request->send(200, "application/json", default_voice_json);
+    delete[] default_voice_json;
+  });
+
+  web_server.on("/get_config", HTTP_GET, [](AsyncWebServerRequest *request) {
+    preferences.begin("config", true);
+    String ssid = preferences.getString("ssid", "");
+    String mdns_host = preferences.getString("mdns_host", "");
+    uint8_t num_leds = preferences.getUChar("num_leds", DEFAULT_NUM_LEDS);
+    String tts_api_key = preferences.getString("tts_api_key", "");
+    String tts_dv = preferences.getString("tts_dv", "");
+    preferences.end();
+
+    char* config_json;
+    size_t buffsize = snprintf(nullptr, 0, "{\"ssid\":\"%s\",\"mdns_host\":\"%s\",\"num_leds\":%d,\"tts_api_key\":\"%s\",\"tts_default_voice\":\"%s\"}", ssid.c_str(), mdns_host.c_str(), num_leds, tts_api_key.c_str(), tts_dv.c_str());
+    config_json = new char[buffsize + 1];
+    snprintf(config_json, buffsize + 1, "{\"ssid\":\"%s\",\"mdns_host\":\"%s\",\"num_leds\":%d,\"tts_api_key\":\"%s\",\"tts_default_voice\":\"%s\"}", ssid.c_str(), mdns_host.c_str(), num_leds, tts_api_key.c_str(), tts_dv.c_str());
+
+    request->send(200, "application/json", config_json);
+    delete[] config_json;
   });
 
   web_server.on("/save_config", HTTP_POST, [](AsyncWebServerRequest *request) {
@@ -1704,6 +1814,15 @@ void web_server_initiate(void) {
       }
     }
 
+    if (request->hasParam("num_leds", true)) {
+      AsyncWebParameter* p = request->getParam("num_leds", true);
+      int num_leds = p->value().toInt();
+      if (num_leds < 1 || num_leds > 255) {
+        num_leds = 1;
+      }
+      preferences.putUChar("num_leds", num_leds);
+    }
+
     if (request->hasParam("iana_tz", true)) {
       AsyncWebParameter* p = request->getParam("iana_tz", true);
       if (!p->value().isEmpty()) {
@@ -1728,7 +1847,7 @@ void web_server_initiate(void) {
     if (request->hasParam("tts_default_voice", true)) {
       AsyncWebParameter* p = request->getParam("tts_default_voice", true);
       if (!p->value().isEmpty()) {
-        Serial.println(p->value().c_str());
+        DEBUG_PRINTLN(p->value().c_str());
         preferences.putString("tts_dv", p->value().c_str()); // tts_default_voice is too long
       }
     }
@@ -1771,10 +1890,11 @@ void web_server_initiate(void) {
     json = String();
   });
 
-  if (ON_STA_FILTER) {
+  //if (WiFi.getMode() == WIFI_STA && WiFi.status() == WL_CONNECTED) {
+  if (WiFi.status() == WL_CONNECTED) {
     web_server_station_setup();
   }
-  else if (ON_AP_FILTER) {
+  else {
     web_server_ap_setup();
   }
 
@@ -1787,6 +1907,17 @@ void DBG_create_test_data(tm local_now) {
   //char frequency = 'w';
   //char frequency = 'm';
   //char frequency = 'y';
+
+  // reference info for struct tm elements from time.h
+  // int tm_sec   seconds [0,61]
+  // int tm_min   minutes [0,59]
+  // int tm_hour  hour [0,23]
+  // int tm_mday  day of month [1,31]
+  // int tm_mon   month of year [0,11]
+  // int tm_year  years since 1900
+  // int tm_wday  day of week [0,6] (Sunday = 0)
+  // int tm_yday  day of year [0,365]
+  // int tm_isdst daylight savings flag
 
   struct tm datetime = {0}; // be careful a year of 0 (1900) will actually result in a larger time_t than the present
   datetime.tm_year = local_now.tm_year-1;
@@ -1821,33 +1952,23 @@ void DBG_create_test_data(tm local_now) {
   //uint8_t exclude = 95; // everyday but Friday
   uint8_t pattern = 1;
   uint32_t color = 0x00FF0000; // solid red
-  //String sound = "debug_test1.mp3";
   char sound[SOUND_SIZE] = ""; // no sound
   char voice[VOICE_SIZE] = "en-ca&v=Clara";
-  struct Event event = {next_available_event_id++, refresh_datetime(datetime, frequency), frequency, {0}, "", exclude, pattern, color, "", "", 0};
-  //int tm_sec   seconds [0,61]
-  //int tm_min   minutes [0,59]
-  //int tm_hour  hour [0,23]
-  //int tm_mday  day of month [1,31]
-  //int tm_mon   month of year [0,11]
-  //int tm_year  years since 1900
-  //int tm_wday  day of week [0,6] (Sunday = 0)
-  //int tm_yday  day of year [0,365]
-  //int tm_isdst daylight savings flag
-  event.end_datetime = {.tm_sec = 0, .tm_min = 0, .tm_hour = 0, .tm_mday = 1, .tm_mon = 0, .tm_year = 70, .tm_wday = 4, .tm_yday = 0, .tm_isdst = -1};
-  snprintf(event.description, sizeof(event.description), "%s", description);
-  snprintf(event.sound, sizeof(event.sound), "%s", sound);
-  snprintf(event.voice, sizeof(event.voice), "%s", voice);
-  events.push_back(event);
+  struct Event event1 = {new_id(false), refresh_datetime(datetime, frequency), frequency, {0}, "", exclude, pattern, color, "", "", 0};
+  event1.end_datetime = {.tm_sec = 0, .tm_min = 0, .tm_hour = 0, .tm_mday = 1, .tm_mon = 0, .tm_year = 70, .tm_wday = 4, .tm_yday = 0, .tm_isdst = -1};
+  snprintf(event1.description, sizeof(event1.description), "%s", description);
+  snprintf(event1.sound, sizeof(event1.sound), "%s", sound);
+  snprintf(event1.voice, sizeof(event1.voice), "%s", voice);
+  events.push_back(event1);
 
   datetime.tm_sec = local_now.tm_sec+25;
   fill_in_datetime(&datetime);
   char description2[DESCRIPTION_SIZE] = "debug+test+2,+longer+description";
   pattern = 2;
   color = 0x01000000;
-  char sound2[SOUND_SIZE] = "chime.mp3";
+  char sound2[SOUND_SIZE] = "chime01.mp3";
   char voice2[VOICE_SIZE] = "en-ca&v=Clara";
-  struct Event event2 = {next_available_event_id++, refresh_datetime(datetime, frequency), frequency, {0}, "", exclude, pattern, color, "", "", 0};
+  struct Event event2 = {new_id(false), refresh_datetime(datetime, frequency), frequency, {0}, "", exclude, pattern, color, "", "", 0};
   event2.end_datetime = {.tm_sec = 0, .tm_min = 0, .tm_hour = 0, .tm_mday = 1, .tm_mon = 0, .tm_year = 70, .tm_wday = 4, .tm_yday = 0, .tm_isdst = -1};
   snprintf(event2.description, sizeof(event2.description), "%s", description2);
   snprintf(event2.sound, sizeof(event2.sound), "%s", sound2);
@@ -1856,30 +1977,18 @@ void DBG_create_test_data(tm local_now) {
 }
 
 void setup() {
-  Serial.begin(115200);
-  delay(1000); // DEBUG: allow serial time to connect
-  /*
-  Serial.print("Attempting Serial connection.");
-  uint8_t attempt_cnt = 0;
-  while (true) {
-    if(Serial){
-      break;
-    }
-    espDelay(10);
-    attempt_cnt++;
-    if (attempt_cnt == 100) {
-      attempt_cnt = 0;
-      Serial.print(".");
-    }
-  }
-  */
+  DEBUG_BEGIN(115200);
+  //delay(1000); // DEBUG: allow serial time to connect
 
+  // ESP32 time.h library does not support setting TZ using IANA timezones. POSIX timezones (i.e. proleptic format) are required.
+  // Here is some reference info for POSIX timezones.
+  //
   //The format is TZ = local_timezone,date/time,date/time.
   //Here, date is in the Mm.n.d format, where:
   //    Mm (1-12) for 12 months
   //    n (1-5) 1 for the first week and 5 for the last week in the month
   //    d (0-6) 0 for Sunday and 6 for Saturday
-
+  //
   //https://www.di-mgt.com.au/wclock/help/wclo_tzexplain.html
   //[America/New_York]
   //TZ=EST5EDT,M3.2.0/2,M11.1.0
@@ -1894,8 +2003,11 @@ void setup() {
   //
   //So daylight saving starts on the second Sunday in March and finishes on the first Sunday in November. The switch occurs at 02:00 local time in both cases. This is the default switch time, so the /2 isn't strictly needed. 
   //
-  // ESP32 time.h library does not support setting TZ to IANA timezones. POSIX timezones (i.e. proleptic format) are required.
   preferences.begin("config", true);
+  NUM_LEDS = preferences.getUChar("num_leds", DEFAULT_NUM_LEDS);
+  //if (NUM_LEDS % 2 == 0) {
+  //  NUM_LEDS++; // an odd number has a definite middle and is easier to work with. NECESSARY???
+  //}
   tz.is_default_tz = false;
   tz.iana_tz = preferences.getString("iana_tz", "");
   tz.unverified_iana_tz = "";
@@ -1910,6 +2022,7 @@ void setup() {
   }
   preferences.end();
 
+  leds = (CRGB*)malloc(NUM_LEDS*sizeof(CRGB));
   // setMaxPowerInVoltsAndMilliamps() should not be used if homogenize_brightness_custom() is used
   // since setMaxPowerInVoltsAndMilliamps() uses the builtin LED power usage constants 
   // homogenize_brightness_custom() was created to avoid.
@@ -1923,18 +2036,18 @@ void setup() {
   homogenize_brightness();
   FastLED.setBrightness(homogenized_brightness);
 
-  // DEBUG: helps to see when device has booted, and helps show that no events have occurred yet.
-  for (uint8_t i = 0; i < NUM_LEDS; i++) {
-    if (i%3) {
-      leds[i] = CRGB::Red;
-    }
-    else {
-      leds[i] = CRGB::Cyan;
-    }
-  }
+  // DEBUG: helps to see when device has booted, possibly from a crash, and helps show that no events have occurred yet.
+  //for (uint8_t i = 0; i < NUM_LEDS; i++) {
+  //  if (i%3) {
+  //    leds[i] = CRGB::Red;
+  //  }
+  //  else {
+  //    leds[i] = CRGB::Cyan;
+  //  }
+  //}
 
 
-  //CAUTION: pins 34-39 are input only!
+  //CAUTION: pins 34-39 for [env:mhetesp32minikit] are input only
   // pin order on module: LRC, BCLK, DIN, GAIN, SD, GND, VIN
   // LRC (wclkPin) - 22, BCLK (bclkPin) - 21, DIN (doutPin) - 17 
   //bool SetPinout(int bclkPin, int wclkPin, int doutPin);
@@ -1944,23 +2057,25 @@ void setup() {
   // speakers will crackle but that will stop after the first sound is played even after the sound has finished playing.
   // this initialization will prevent that crackle now
   // playing an mp3 will do this initialization, but doing it now will prevent that crackle
-  //audio_out->SetBitsPerSample(16); // Constant for MP3 decoder
+  //audio_out->SetBitsPerSample(16);
   //audio_out->SetChannels(2);
   audio_out->begin();
   audio_out->stop();
 
   // random8 is also based off of random16 seed
   random16_set_seed(8934); // taken from NoisePlayground.ino, not sure if this a particularly good seed
-  random16_add_entropy(analogRead(34)); // ESP32 mini GPIO34 is ADC0
+  random16_add_entropy(analogRead(34)); // ESP32 mini GPIO34 is an ADC
 
-  Serial.println("create_patterns_list()");
+  // once you are happy with your patterns list and special colors list you may want to hardcode them
+  // to patterns_json and special_colors_json instead of using these functions to generate the JSON strings
+  // at each boot.
   while(!create_patterns_list());
   while(!create_special_colors_list());
 
   button.begin(BUTTON_PIN);
 
-  button.setLongClickTime(3000);
-  button.setTapHandler(single_click_handler);
+  button.setLongClickTime(2000); // milliseconds
+  button.setTapHandler(single_click_handler); // allows for a slower click which is better for a big button with more inertia
   //button.setClickHandler(single_click_handler);
   button.setLongClickDetectedHandler(long_click_handler);
 
@@ -1973,9 +2088,9 @@ void setup() {
   WiFi.scanNetworks(false, true); // synchronous scan, show hidden
 
   if (attempt_connect()) {
-    Serial.println("Attempting to WiFi connection.");
+    DEBUG_PRINTLN("Attempting to WiFi connection.");
     if (!wifi_connect()) {
-      // failure to connect will result in creating AP
+      // failure to connect will result in creating AP so WiFi credentials can be input by connecting to device directly
       espDelay(2000);
       wifi_AP();
     }
@@ -1984,13 +2099,22 @@ void setup() {
     wifi_AP();
   }
 
+  if (WiFi.status() != WL_CONNECTED) {
+    // use faint red to indicate not connected
+    FastLED.clear();
+    leds[0] = CRGB::Red;
+    leds[NUM_LEDS/2] = CRGB::Red;
+    FastLED.show();
+  }
+
   mdns_setup();
   web_server_initiate();
 
-  if (ON_STA_FILTER) {
-    Serial.print("Attempting to fetch time from ntp server.");
+  //if (WiFi.getMode() == WIFI_STA && WiFi.status() == WL_CONNECTED) {
+  if (WiFi.status() == WL_CONNECTED) {
+    DEBUG_PRINT("Attempting to fetch time from ntp server.");
     configTzTime(tz.posix_tz.c_str(), "pool.ntp.org");
-    //configTzTime(tz.posix_tz.c_str(), "192.168.1.99");
+    //configTzTime(tz.posix_tz.c_str(), "192.168.1.99"); // use local ntp server that allows for testing different datetime scenarios
     struct tm local_now = {0};
     uint8_t attempt_cnt = 0;
     while (true) {
@@ -2004,10 +2128,10 @@ void setup() {
       attempt_cnt++;
       if (attempt_cnt == 100) {
         attempt_cnt = 0;
-        Serial.print(".");
+        DEBUG_PRINT(".");
       }
     }
-    Serial.printf("\n***** local time: %d/%02d/%02d %02d:%02d:%02d *****\n", local_now.tm_year+1900, local_now.tm_mon+1, local_now.tm_mday, local_now.tm_hour, local_now.tm_min, local_now.tm_sec);
+    DEBUG_PRINTF("\n***** local time: %d/%02d/%02d %02d:%02d:%02d *****\n", local_now.tm_year+1900, local_now.tm_mon+1, local_now.tm_mday, local_now.tm_hour, local_now.tm_min, local_now.tm_sec);
 
     TaskHandle_t Task1;
     xTaskCreatePinnedToCore(aural_notifier, "Task1", 10000, NULL, 1, &Task1, 0);
@@ -2015,10 +2139,6 @@ void setup() {
     load_events_file();
     //DBG_create_test_data(local_now);
     check_for_recent_events(0);
-
-    //while(true) {
-    //  delay(1000);
-    //}
   }
 }
 
@@ -2033,12 +2153,14 @@ void loop() {
     ESP.restart();
   }
 
+
   button.loop();
   check_for_recent_events(EVENT_CHECK_INTERVAL);
   visual_notifier();
   if (events_reload_needed) {
-    visual_reset();
     events_reload_needed = load_events_file();
+    FastLED.clear();
+    FastLED.show();
   }
 
   if (tz.unverified_iana_tz != "") {
