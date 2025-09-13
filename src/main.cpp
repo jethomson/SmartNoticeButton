@@ -21,13 +21,10 @@
 //#include "credentials.h" // set const char *wifi_ssid and const char *wifi_password in include/credentials.h
 #include <WiFi.h>
 #include <WiFiUdp.h>
-//#include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <DNSServer.h>
 #include <ESPmDNS.h>
-//#include <SPIFFSEditor.h>
 #include <LittleFS.h>
-//#include <SPI.h>
 #include <Preferences.h>
 
 #include <FastLED.h>
@@ -174,12 +171,10 @@ void show(void);
 
 void breathing(uint16_t draw_interval);
 void blink(uint16_t draw_interval, uint8_t num_blinks, uint8_t num_intervals_off);
-//void orbit(uint16_t draw_interval, CRGB rgb, int8_t delta);
-//uint16_t forwards(uint16_t index);
-uint16_t backwards(uint16_t index);
+//uint16_t forwards(uint16_t index_in);
+uint16_t backwards(uint16_t index_in);
 void spin(uint16_t draw_interval, uint16_t(*dfp)(uint16_t));
 void twinkle(uint16_t draw_interval);
-void noise(uint16_t draw_interval);
 void fill(uint32_t color);
 void visual_reset(void);
 void visual_notifier(void);
@@ -303,39 +298,15 @@ void blink(uint16_t draw_interval, uint8_t num_blinks, uint8_t num_intervals_off
     }
   }
 }
-
-
-//uint16_t or_pos = NUM_LEDS;
-//uint8_t or_loop_num = 0;
-//void orbit(uint16_t draw_interval, CRGB rgb, int8_t delta) {
-//  if (finished_waiting(draw_interval)) {
-//    //fadeToBlackBy(leds, NUM_LEDS, 20);
-//
-//    if (delta > 0) {
-//      or_pos = or_pos % NUM_LEDS;
-//    }
-//    else {
-//      // pos underflows after it goes below zero
-//      if (or_pos > NUM_LEDS-1) {
-//        or_pos = NUM_LEDS-1;
-//      }
-//    }
-//
-//    leds[or_pos] = rgb;
-//    or_pos = or_pos + delta;
-//
-//    or_loop_num = (or_pos == NUM_LEDS) ? or_loop_num+1 : or_loop_num; 
-//  }
-//}
  
 
-//uint16_t forwards(uint16_t index) {
-//  return index;
+//uint16_t forwards(uint16_t index_in) {
+//  return index_in;
 //}
 
 
-uint16_t backwards(uint16_t index) {
-  return (NUM_LEDS-1)-index;
+uint16_t backwards(uint16_t index_in) {
+  return (NUM_LEDS-1)-index_in;
 }
 
 
@@ -356,6 +327,7 @@ void spin(uint16_t draw_interval, uint16_t(*dfp)(uint16_t)) {
   }
 }
 
+
 void twinkle(uint16_t draw_interval) {
   if (finished_waiting(draw_interval)) {
     for(uint16_t i = 0; i < NUM_LEDS; i++) {
@@ -363,37 +335,6 @@ void twinkle(uint16_t draw_interval) {
         leds[i] = CRGB::White - leds[i];
       }
     }
-  }
-}
-
-void noise(uint16_t draw_interval) {
-  //x - x-axis coordinate on noise map for value (brightness) noise
-  //hue_x - x-axis coordinate on noise map for color hue noise
-  //time - the time position for the noise field 
-  static uint32_t x = (uint32_t)((uint32_t)random16() << 16) + (uint32_t)random16();
-  static uint32_t hue_x = (uint32_t)((uint32_t)random16() << 16) + (uint32_t)random16();
-  static uint32_t time = (uint32_t)((uint32_t)random16() << 16) + (uint32_t)random16();
-   
-  // Play with the values of the variables below and see what kinds of effects they
-  // have!  More octaves will make things slower.
-   
-  //octaves - the number of octaves to use for value (brightness) noise
-  //scale - the scale (distance) between x points when filling in value (brightness) noise
-  //hue_octaves - the number of octaves to use for color hue noise
-  //hue_scale - the scale (distance) between x points when filling in color hue noise
-  const uint8_t octaves=1;
-  const int scale=57771;
-  const uint8_t hue_octaves=3;
-  const int hue_scale=1;
-  const int x_speed=331;
-  const int time_speed=1111;
-
-  if (finished_waiting(draw_interval)) {
-    // adjust the intra-frame time values
-    x += x_speed;
-    time += time_speed;
-    //fill_noise8 (CRGB *leds, int num_leds, uint8_t octaves, uint16_t x, int scale, uint8_t hue_octaves, uint16_t hue_x, int hue_scale, uint16_t time)
-    fill_noise8(leds, NUM_LEDS, octaves, x, scale, hue_octaves, hue_x, hue_scale, time);
   }
 }
 
@@ -452,8 +393,6 @@ void fill(uint32_t color) {
 void visual_reset(void) {
   br_delta = 0;
   bl_count = 0;
-  //or_pos = NUM_LEDS;
-  //or_loop_num = 0;
   finished_waiting(0); // effectively resets timer used for visual effects
   FastLED.clear();
 }
@@ -463,6 +402,12 @@ void visual_reset(void) {
 // otherwise a reoccurrence of an event with the same id as last_id_seen may not be shown.
 int32_t last_id_seen = SENTINEL_EVENT_ID; // event.id is always non-negative, so last_id_seen of -1 indicates never seen
 void visual_notifier(void) {
+  // NOTE:
+  // a design decision was made that the color used by a pattern will not evolve over time.
+  // shifting colors are visually appealing, but they are counter productive to serving as a visual indicator
+  // for example: one event is blinking blue, and another event is blinking with a shifting color
+  //              the shifting color will eventually show blue, so you would have two separate events showing
+  //              the same visual indicator.
   const uint32_t SHOW_TIME = 4000; // milliseconds
   static uint16_t i = 0;
   static uint32_t pm = 0;
@@ -552,7 +497,8 @@ void visual_notifier(void) {
               // basic color is paired with black to show spinning
               CRGB color_dim = color;
               //color_dim.nscale8(160); // lower numbers are closer to black
-              color_dim.nscale8(80); // lower numbers are closer to black
+              //color_dim.nscale8(80); // lower numbers are closer to black
+              color_dim.nscale8(20); // lower numbers are closer to black
               fill_gradient_RGB(leds, NUM_LEDS, color, color_dim);
             }
             else {
@@ -589,8 +535,7 @@ void visual_notifier(void) {
 
 
 // Called when there's a warning or error (like a buffer underflow or decode hiccup)
-//void StatusCallback(void *cbData, int code, const char *string)
-//{
+//void StatusCallback(void *cbData, int code, const char *string) {
 //  const char *ptr = reinterpret_cast<const char *>(cbData);
 //  // Note that the string may be in PROGMEM, so copy it to RAM for printf
 //  char s1[64];
@@ -749,7 +694,6 @@ void tell(const char* description, const char* voice, time_t timestamp, bool do_
 }
 
 
-//AudioFileSourceSPIFFS *sound_file = new AudioFileSourceSPIFFS();
 void file_sound(const char* filename) {
   size_t buffsize = snprintf(nullptr, 0, "/files/%s", filename);
   char* filepath = new char[buffsize + 1];
@@ -769,7 +713,6 @@ void aural_notifier(void* parameter) {
     struct AudioMessage am;
     if (xQueueReceive(qaudio_messages, (void *)&am, 0) == pdTRUE) {
       is_audio_message_queued = true;
-      //if (strlen(am.sound) > 0 && strncmp(am.sound, "null", SOUND_SIZE*sizeof(char)) != 0) {
       if (strlen(am.sound) > 0) {
         const char* http_sound_prefix = "http://";
         if (strncmp(am.sound, http_sound_prefix, strlen(http_sound_prefix)*sizeof(char)) == 0) {
@@ -941,22 +884,6 @@ tm refresh_datetime(tm datetime, char frequency) {
   time_t tnow = mktime(&local_now);
   time_t t2 = mktime(&next_event);
   if (t2 <= tnow) {
-    /*
-    // this seems unnessary since we set next_event = datetime above
-
-    // event is in the past, so we need to update it
-    next_event.tm_sec = datetime.tm_sec;
-    next_event.tm_min = datetime.tm_min;
-    next_event.tm_hour = datetime.tm_hour;
-    // tm_wday and tm_yday are not set because mktime() always ignores them.
-    next_event.tm_isdst = -1;
-
-    
-    next_event.tm_mday = datetime.tm_mday;
-    next_event.tm_mon = datetime.tm_mon;
-    next_event.tm_year = datetime.tm_year;
-    */
-
     if (frequency == 'o') { // once, one-shot
       // the code that detects if an event is happening now allows a window of time an event can
       // be close to. this helps prevent missed events, but it can also lead to the event
@@ -1257,38 +1184,6 @@ bool load_events_file() {
   return false;
 }
 
-
-/*
-bool save_file(String fs_path, String json, String* message) {
-  if (fs_path == "") {
-    if (message) {
-      *message = F("save_file(): Filename is empty. Data not saved.");
-    }
-    return false;
-  }
-
-  //create_dirs(fs_path.substring(0, fs_path.lastIndexOf("/")+1));
-  File f = LittleFS.open(fs_path, "w");
-  if (f) {
-    //noInterrupts();
-    f.print(json);
-    delay(1);
-    f.close();
-    //interrupts();
-  }
-  else {
-    if (message) {
-      *message = F("save_file(): Could not open file.");
-    }
-    return false;
-  }
-
-  if (message) {
-    *message = F("save_file(): Data saved.");
-  }
-  return true;
-}
-*/
 
 bool save_file(String fs_path, String json, String& message) {
   if (fs_path == "") {
@@ -1727,34 +1622,6 @@ void web_server_initiate(void) {
     request->send(LittleFS, "/www/voicerss.json");
   });
 
-  /*
-  web_server.on("/get_default_voice", HTTP_GET, [](AsyncWebServerRequest *request) {
-    preferences.begin("config", true);
-    String config = "{\"tts_default_voice\":\"";
-    config += preferences.getString("tts_dv", "");
-    config += "\"}";
-    preferences.end();
-    DEBUG_PRINTLN(config);
-    request->send(200, "application/json", config);
-  });
-
-  web_server.on("/get_config", HTTP_GET, [](AsyncWebServerRequest *request) {
-    preferences.begin("config", true);
-    String config = "{\"ssid\":\"";
-    config += preferences.getString("ssid", "");
-    config += "\",\"mdns_host\":\"";
-    config += preferences.getString("mdns_host", "");
-    config += "\",\"tts_api_key\":\"";
-    config += preferences.getString("tts_api_key", "");
-    config += "\",\"tts_default_voice\":\"";
-    config += preferences.getString("tts_dv", "");
-    config += "\"}";
-    preferences.end();
-    DEBUG_PRINTLN(config);
-    request->send(200, "application/json", config);
-  });
-  */
-
   web_server.on("/get_default_voice", HTTP_GET, [](AsyncWebServerRequest *request) {
     preferences.begin("config", true);
     String default_voice = preferences.getString("tts_dv", "");
@@ -1978,7 +1845,6 @@ void DBG_create_test_data(tm local_now) {
 
 void setup() {
   DEBUG_BEGIN(115200);
-  //delay(1000); // DEBUG: allow serial time to connect
 
   // ESP32 time.h library does not support setting TZ using IANA timezones. POSIX timezones (i.e. proleptic format) are required.
   // Here is some reference info for POSIX timezones.
@@ -2005,9 +1871,6 @@ void setup() {
   //
   preferences.begin("config", true);
   NUM_LEDS = preferences.getUChar("num_leds", DEFAULT_NUM_LEDS);
-  //if (NUM_LEDS % 2 == 0) {
-  //  NUM_LEDS++; // an odd number has a definite middle and is easier to work with. NECESSARY???
-  //}
   tz.is_default_tz = false;
   tz.iana_tz = preferences.getString("iana_tz", "");
   tz.unverified_iana_tz = "";
@@ -2054,11 +1917,9 @@ void setup() {
   audio_out->SetPinout(21, 22, 17); // works
   uint8_t volume = 100;
   audio_out->SetGain(((float)volume)/100.0);
-  // speakers will crackle but that will stop after the first sound is played even after the sound has finished playing.
-  // this initialization will prevent that crackle now
-  // playing an mp3 will do this initialization, but doing it now will prevent that crackle
-  //audio_out->SetBitsPerSample(16);
-  //audio_out->SetChannels(2);
+  // speaker crackles but that will stop after the first sound is played even after the sound has finished playing.
+  // this initialization will prevent that crackle without needing to play a sound to make it go away.
+  // normally playing an mp3 will do this initialization, but doing it now will prevent speaker crackle.
   audio_out->begin();
   audio_out->stop();
 
