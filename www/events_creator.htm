@@ -988,8 +988,6 @@ async function load_events() {
 async function get_timezone() {
   let iana_tz = "UTC";
   let is_default_tz = true;
-  //iana_tz = "bad_timezone";
-  //is_default_tz = false;
  
   let message = document.createElement("div");
 
@@ -1052,8 +1050,6 @@ async function get_timezone() {
 
 
 async function run() {
-
-  await get_timezone();
   await create_event_html_template();
   let events_container = document.getElementById("events_container");
   let add_event_buttons_div = document.createElement("div");
@@ -1076,6 +1072,7 @@ async function run() {
   add_event_buttons_div.innerHTML = add_event_buttons;
   events_container.append(add_event_buttons_div);
   load_events();
+  await get_timezone();
 }
 
 function quick_add_event(e) {

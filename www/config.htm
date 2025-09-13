@@ -385,15 +385,16 @@ async function get_config() {
 
 
 async function run() {
-  get_wifi_networks();
   get_config();
-
-  create_voice_options();
+  get_wifi_networks();
 
   let is_default_tz = await get_timezone();
   if (is_default_tz) {
     handle_iana_tz_change(true);
   }
+
+  // works more reliably if called last
+  create_voice_options();
 }
 
 
