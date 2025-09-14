@@ -103,9 +103,17 @@ bool dns_up = false;
 
 bool restart_needed = false;
 
-// any changes to NUM_LEDS here will be overwritten
-// NUM_LEDS set in the frontend
-// and DEFAULT_NUM_LEDS set in platformio.ini
+// any changes to LEDS_ORIGIN_OFFSET here will be overwritten.
+// LEDS_ORIGIN_OFFSET is set in the frontend.
+// and DEFAULT_LEDS_ORIGIN_OFFSET is set in platformio.ini.
+// since you may be physically limited where you place the first LED when assembling the button
+// LEDS_ORIGIN_OFFSET lets you adjust where the apparent origin is. for example, if the first
+// LED is physically wired at 1 o'clock you change LEDS_ORIGIN_OFFSET to a value different from
+// 0 such that origin *appears* as if it is at 6 o'clock.
+uint16_t LEDS_ORIGIN_OFFSET = 0;
+// any changes to NUM_LEDS here will be overwritten.
+// NUM_LEDS is set in the frontend.
+// and DEFAULT_NUM_LEDS is set in platformio.ini.
 uint16_t NUM_LEDS = 0;
 CRGB* leds;
 uint8_t homogenized_brightness = 255;
@@ -269,6 +277,11 @@ void show(void) {
 }
 
 
+uint16_t idx(uint16_t index_in) {
+  return (LEDS_ORIGIN_OFFSET + index_in) % NUM_LEDS;
+}
+
+
 uint8_t br_delta = 0;
 void breathing(uint16_t draw_interval) {
   const uint8_t min_brightness = 2;
@@ -306,7 +319,7 @@ void blink(uint16_t draw_interval, uint8_t num_blinks, uint8_t num_intervals_off
 
 
 uint16_t backwards(uint16_t index_in) {
-  return (NUM_LEDS-1)-index_in;
+  return idx((NUM_LEDS-1)-index_in);
 }
 
 
@@ -319,11 +332,11 @@ void spin(uint16_t draw_interval, uint16_t(*dfp)(uint16_t)) {
     //  return;
     //}
     //count++;
-    CRGB color0 = leds[(*dfp)(NUM_LEDS-1)]; 
+    CRGB color0 = leds[(*dfp)(idx(NUM_LEDS-1))];
     for(uint16_t i = NUM_LEDS-1; i > 0; i--) {
-      leds[(*dfp)(i)] = leds[(*dfp)(i-1)];
+      leds[(*dfp)(idx(i))] = leds[(*dfp)(idx(i-1))];
     }
-    leds[(*dfp)(0)] = color0; 
+    leds[(*dfp)(idx(0))] = color0;
   }
 }
 
@@ -332,6 +345,7 @@ void twinkle(uint16_t draw_interval) {
   if (finished_waiting(draw_interval)) {
     for(uint16_t i = 0; i < NUM_LEDS; i++) {
       if (random8() < 16) {
+        // no real reason to use idx() since these are random indices
         leds[i] = CRGB::White - leds[i];
       }
     }
@@ -343,16 +357,18 @@ void fill(uint32_t color) {
   // regular RGB color only uses 24 bits but if color is stored in 32 bits
   // we can utilize the unused upper bits to indicate a color is special
   // colors less than or equal to 0x00FFFFFF are normal RGB colors
-  // colors that use values greater than or equal to 0x01000000 are special
-  if (color <= 0x00FFFFFF) {
+  uint8_t color_flag = (color >> 24);
+  if (color_flag == 0x00) {
     fill_solid(leds, NUM_LEDS, color);
   }
-  else if ((color >> 24) == 0x01) {
-    // separate out special colors that start with 0x01
-    // probably will not create any other special leader bit codes than 0x01
-    //color = color & 0x00FFFFFF;
+  else if (color_flag == 0x01) {
+    // 0x01------ flag indicates special colors
     if (static_cast<SpecialColor>(color) == RAINBOW) {
-     	fill_rainbow_circular(leds, NUM_LEDS, 0);
+      // cannot manipulate the LED indices with idx() for fill_rainbow_circular, but can change the hue at leds[0] which
+      // accomplishes the same goal of changing the apparent origin of the LEDs
+      const uint16_t hueChange = 65535 / (uint16_t) NUM_LEDS;  // hue change for each LED, * 256 for precision (256 * 256 - 1)
+      uint16_t initialhue = (uint8_t)((LEDS_ORIGIN_OFFSET*hueChange) >> 8);  // assign new hue with precise offset (as 8-bit)
+      fill_rainbow_circular(leds, NUM_LEDS, initialhue);
     }
     else {
       CRGB color1 = CRGB::Black;
@@ -370,22 +386,28 @@ void fill(uint32_t color) {
         color2 = CRGB::Purple;
       }
       //fill_gradient_RGB() shows colors more distinctly than fill_gradient()
-      //fill_gradient_RGB(leds, NUM_LEDS, color1, color2);
       //half and half looks better than a gradient since the button cover already diffuses the color
       uint8_t i = 0;
       while(i < NUM_LEDS/2) {
-        leds[i] = color1;
+        leds[idx(i)] = color1;
         i++;
       }
       while(i < NUM_LEDS) {
-        leds[i] = color2;
+        leds[idx(i)] = color2;
         i++;
       }
     }
   }
+  else if (color_flag == 0x02) {
+    // 0x02------ flag indicates to fade color across gradient fill
+    color = color & 0x00FFFFFF;
+    CRGB color_dim = color;
+    color_dim.nscale8(20); // lower numbers are closer to black
+    fill_gradient_RGB(leds, idx(0), color, idx(NUM_LEDS-1), color_dim);
+  }
   else {
     // black and pink is used to indicate something went wrong during testing
-    fill_gradient_RGB(leds, NUM_LEDS, CRGB::Black, CRGB::Pink);
+    fill_gradient_RGB(leds, idx(0), CRGB::Black, idx(NUM_LEDS-1), CRGB::Pink);
   }
 }
 
@@ -494,16 +516,11 @@ void visual_notifier(void) {
           if (refill) {
             refill = false;
             if (color <= 0x00FFFFFF) {
-              // basic color is paired with black to show spinning
-              CRGB color_dim = color;
-              //color_dim.nscale8(160); // lower numbers are closer to black
-              //color_dim.nscale8(80); // lower numbers are closer to black
-              color_dim.nscale8(20); // lower numbers are closer to black
-              fill_gradient_RGB(leds, NUM_LEDS, color, color_dim);
+              // 0x02------ flag indicates to fade color across gradient fill
+              // the change in brightness across the fill makes it possible to see the spinning motion
+              color += (0x02 << 24);
             }
-            else {
-              fill(color);
-            }
+            fill(color);
           }
           // complete rotation about every 2 seconds independent of the number of LEDs
           spin(2000/NUM_LEDS, &backwards);
@@ -511,6 +528,8 @@ void visual_notifier(void) {
         case TWINKLE:
           FastLED.setBrightness(homogenized_brightness);
           if (is_wait_over(100)) {
+            // twinkles should only show momentarily
+            // by refilling every time the twinkles from the previous draw disappear
             fill(color);
             twinkle(0);
           }
@@ -1641,14 +1660,15 @@ void web_server_initiate(void) {
     String ssid = preferences.getString("ssid", "");
     String mdns_host = preferences.getString("mdns_host", "");
     uint8_t num_leds = preferences.getUChar("num_leds", DEFAULT_NUM_LEDS);
+    uint8_t leds_origin_offset = preferences.getUChar("origin_offset", DEFAULT_LEDS_ORIGIN_OFFSET);
     String tts_api_key = preferences.getString("tts_api_key", "");
     String tts_dv = preferences.getString("tts_dv", "");
     preferences.end();
 
     char* config_json;
-    size_t buffsize = snprintf(nullptr, 0, "{\"ssid\":\"%s\",\"mdns_host\":\"%s\",\"num_leds\":%d,\"tts_api_key\":\"%s\",\"tts_default_voice\":\"%s\"}", ssid.c_str(), mdns_host.c_str(), num_leds, tts_api_key.c_str(), tts_dv.c_str());
+    size_t buffsize = snprintf(nullptr, 0, "{\"ssid\":\"%s\",\"mdns_host\":\"%s\",\"num_leds\":%d,\"leds_origin_offset\":%d,\"tts_api_key\":\"%s\",\"tts_default_voice\":\"%s\"}", ssid.c_str(), mdns_host.c_str(), num_leds, leds_origin_offset, tts_api_key.c_str(), tts_dv.c_str());
     config_json = new char[buffsize + 1];
-    snprintf(config_json, buffsize + 1, "{\"ssid\":\"%s\",\"mdns_host\":\"%s\",\"num_leds\":%d,\"tts_api_key\":\"%s\",\"tts_default_voice\":\"%s\"}", ssid.c_str(), mdns_host.c_str(), num_leds, tts_api_key.c_str(), tts_dv.c_str());
+    snprintf(config_json, buffsize + 1, "{\"ssid\":\"%s\",\"mdns_host\":\"%s\",\"num_leds\":%d,\"leds_origin_offset\":%d,\"tts_api_key\":\"%s\",\"tts_default_voice\":\"%s\"}", ssid.c_str(), mdns_host.c_str(), num_leds, leds_origin_offset, tts_api_key.c_str(), tts_dv.c_str());
 
     request->send(200, "application/json", config_json);
     delete[] config_json;
@@ -1689,6 +1709,18 @@ void web_server_initiate(void) {
       }
       preferences.putUChar("num_leds", num_leds);
     }
+
+    if (request->hasParam("leds_origin_offset", true)) {
+      AsyncWebParameter* p = request->getParam("leds_origin_offset", true);
+      int leds_origin_offset = p->value().toInt();
+      if (leds_origin_offset < 0 || leds_origin_offset > 255) {
+        leds_origin_offset = 0;
+      }
+      // leds_origin_offset key length is too long (> 15 chars)
+      // so call it origin_offset instead
+      preferences.putUChar("origin_offset", leds_origin_offset);
+    }
+
 
     if (request->hasParam("iana_tz", true)) {
       AsyncWebParameter* p = request->getParam("iana_tz", true);
@@ -1871,6 +1903,7 @@ void setup() {
   //
   preferences.begin("config", true);
   NUM_LEDS = preferences.getUChar("num_leds", DEFAULT_NUM_LEDS);
+  LEDS_ORIGIN_OFFSET = preferences.getUChar("origin_offset", DEFAULT_LEDS_ORIGIN_OFFSET);
   tz.is_default_tz = false;
   tz.iana_tz = preferences.getString("iana_tz", "");
   tz.unverified_iana_tz = "";
@@ -1902,10 +1935,10 @@ void setup() {
   // DEBUG: helps to see when device has booted, possibly from a crash, and helps show that no events have occurred yet.
   //for (uint8_t i = 0; i < NUM_LEDS; i++) {
   //  if (i%3) {
-  //    leds[i] = CRGB::Red;
+  //    leds[idx(i)] = CRGB::Red;
   //  }
   //  else {
-  //    leds[i] = CRGB::Cyan;
+  //    leds[idx(i)] = CRGB::Cyan;
   //  }
   //}
 
@@ -1963,8 +1996,8 @@ void setup() {
   if (WiFi.status() != WL_CONNECTED) {
     // use faint red to indicate not connected
     FastLED.clear();
-    leds[0] = CRGB::Red;
-    leds[NUM_LEDS/2] = CRGB::Red;
+    leds[idx(0)] = CRGB::Red;
+    leds[idx(NUM_LEDS/2)] = CRGB::Red;
     FastLED.show();
   }
 
@@ -2028,5 +2061,3 @@ void loop() {
     verify_timezone(tz.unverified_iana_tz);
   }
 }
-
-

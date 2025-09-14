@@ -46,8 +46,12 @@
     grid-column-start: 6;
     text-align: left;
   }
-  
-  #dimensions,
+
+  #led_data {
+    text-align:left
+  }
+
+  #led_data,
   .wide-input {
     grid-column-start: 2;
     grid-column: span 4;
@@ -58,6 +62,7 @@
   }  
 
   label {
+    vertical-align: middle;
     margin: auto 0px;
   }
 
@@ -75,8 +80,8 @@
     width: 150px;
   }
 
-  #rows,
-  #columns {
+  #num_leds,
+  #leds_origin_offset {
     width: 30px;
   }
 
@@ -141,8 +146,13 @@
     <input id="mdns_host" form="save_config" name="mdns_host" type="text" autocapitalize="none" maxlength="30" autocomplete="off">
     <label>.local</label>
 
-    <label class="item-a">Num LEDs</label>
-    <input id="num_leds" class="wide-input" form="save_config" placeholder="enter number of LEDs here" name="num_leds" type="number" pattern="[0-9]*" min=1 autocomplete="off">
+    <label class="item-a" style="align-self: center">LEDs</label>
+    <section id="led_data">
+      <label>number</label>
+      <input id="num_leds" form="save_config" title="enter number of LEDs here" name="num_leds" type="number" pattern="[0-9]*" min=1 maxlength="4" autocomplete="off">
+      <label>offset</label>
+      <input id="leds_origin_offset" form="save_config" title="enter origin offset for LEDs here" name="leds_origin_offset" type="number" pattern="[0-9]*" min=1 maxlength="4" autocomplete="off">
+    </section>
 
     <label class="item-a">IANA Timezone</label>
     <input id="iana_tz" class="wide-input" form="save_config" placeholder="enter IANA timezone here" name="iana_tz" onchange="handle_iana_tz_change(false)" autocomplete="off">
@@ -380,6 +390,7 @@ async function get_config() {
   document.getElementById("ssid").value = data["ssid"];
   document.getElementById("mdns_host").value = data["mdns_host"];
   document.getElementById("num_leds").value = data["num_leds"];
+  document.getElementById("leds_origin_offset").value = data["leds_origin_offset"];
   document.getElementById("tts_api_key").value = data["tts_api_key"];
 }
 
