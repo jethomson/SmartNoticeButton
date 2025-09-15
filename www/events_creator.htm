@@ -190,14 +190,22 @@
 </head>
 <body>
   <a id="return_main_menu" href="index.htm"><svg height="24px" width="24px" viewBox="0 0 16 16" id="Layer_1" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><path fill="white" d="M15.45,7L14,5.551V2c0-0.55-0.45-1-1-1h-1c-0.55,0-1,0.45-1,1v0.553L9,0.555C8.727,0.297,8.477,0,8,0S7.273,0.297,7,0.555  L0.55,7C0.238,7.325,0,7.562,0,8c0,0.563,0.432,1,1,1h1v6c0,0.55,0.45,1,1,1h3v-5c0-0.55,0.45-1,1-1h2c0.55,0,1,0.45,1,1v5h3  c0.55,0,1-0.45,1-1V9h1c0.568,0,1-0.437,1-1C16,7.562,15.762,7.325,15.45,7z"/></svg></a>
-  <h3 style="margin-bottom: 0">Create Notifications</h3>
-  <h5 style="margin-top: 0">
-  Columns marked with a * are optional.<br>
-  Hold the control key while clicking to select or deselect multiple days in Exclude.
+  <h3 style="margin-bottom: 0">Create Events</h3>
+  <h5 style="margin: 0 auto; width: 30vw">
+    <details>
+      <summary>Info</summary>
+        <p style="text-align: left">
+        Columns marked with a * are optional.<br>
+        Hold the control key while clicking to select or deselect multiple days in Exclude.<br>
+        <br>
+        Daylight Saving Time transitions:<br>
+        Events scheduled during the hour which is skipped when DST starts will occur the following hour. For example, an event scheduled for 2:30 AM moves to 3:30 AM for that morning. An event scheduled at 2 AM moves to 3 AM.<br>
+        Events scheduled during the hour which repeats when DST ends will occur within the second occurrence of that hour. For example, an event scheduled for 1:30 AM, skips 1:30 AM EDT and occurs at 1:30 AM EST for that morning. An event at 1 AM will occur 60 minutes and 1 second after 12:59:59 AM. An event at 2 AM will occur 120 minutes and 1 second after 12:59:59 AM.
+        </p>
+    </details>
   </h5>
   <div id="main_div">
     <div id="button_container">
-      <!--input type="text" id="fileid" maxlength=26 placeholder="Enter filename here." value="" autocomplete="off" /-->
       <div id="gap1" class="gap"></div>
       <button id="btn_save" class="save-button" onclick="save()"><svg class="svg-icon" style="width:36px;height:36px" viewBox="0 -960 960 960"> <path id="saveSvg" fill="currentColor" d="M440-320v-326L336-542l-56-58 200-200 200 200-56 58-104-104v326h-80ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z"/></svg> &nbsp; <span id="btn_save_text">Save</span> </button>
     </div>
