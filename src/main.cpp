@@ -881,8 +881,20 @@ bool create_special_colors_list(void) {
 
 
 void fill_in_datetime(tm* _datetime) {
+//#if defined DEBUG_CONSOLE
+//  char buffer[100];
+//  // missing timezone and empty parenthesis indicate _datetime->tm_isdst is -1
+//  strftime(buffer, sizeof(buffer), "%a %Y/%m/%d %H:%M:%S %Z (%z)", _datetime);
+//  DEBUG_PRINTF("\nfill_in_datetime() before: %s\n", buffer);
+//#endif
+
   time_t t = mktime(_datetime);
   localtime_r(&t, _datetime); // tm_wday, tm_yday, and tm_isdst are filled in with the proper values
+
+//#if defined DEBUG_CONSOLE
+//  strftime(buffer, sizeof(buffer), "%a %Y/%m/%d %H:%M:%S %Z (%z)", _datetime);
+//  DEBUG_PRINTF("fill_in_datetime() after: %s\n", buffer);
+//#endif
 }
 
 
@@ -893,12 +905,9 @@ tm refresh_datetime(tm datetime, char frequency) {
   time_t now;
   time(&now);
   localtime_r(&now, &local_now);
-  //DEBUG_PRINTF("local:     %s", asctime(&local_now));
-  //DEBUG_PRINTF("datetime:     %s", asctime(&datetime));
   
   next_event = datetime;
   next_event.tm_isdst = -1; // A negative value of tm_isdst causes mktime to attempt to determine if Daylight Saving Time was in effect in the specified time. 
-  //DEBUG_PRINTF("1) next_event:     %s", asctime(&next_event));
 
   time_t tnow = mktime(&local_now);
   time_t t2 = mktime(&next_event);
@@ -1021,13 +1030,13 @@ bool is_expired(tm datetime, tm end_datetime) {
   time_t tend = mktime(&end_datetime);
 
   if (tdt <= tnow) {
-    DEBUG_PRINTLN("expired: in past");
+    DEBUG_PRINTLN("expired: in past\n");
     return true;
   }
 
   if (tdt >= tend && !(end_datetime.tm_year == 70 && end_datetime.tm_mon == 0 && end_datetime.tm_mday == 1)) {
     if (tdt >= tend) {
-      DEBUG_PRINTLN("expired: after end date");
+      DEBUG_PRINTLN("expired: after end date\n");
       return true;
     }
   }
@@ -1112,11 +1121,19 @@ bool load_events_file() {
       DEBUG_PRINT("description: ");
       DEBUG_PRINTLN(description);
 
-      DEBUG_PRINT("original datetime: ");
-      DEBUG_PRINT(asctime(&datetime));
+
+#if defined DEBUG_CONSOLE
+      char buffer[100];
+      strftime(buffer, sizeof(buffer), "%a %Y/%m/%d %H:%M:%S %Z (%z)", &datetime);
+      DEBUG_PRINTF("original datetime : %s\n", buffer);
+#endif
+
       datetime = refresh_datetime(datetime, frequency);
-      DEBUG_PRINT("refreshed datetime: ");
-      DEBUG_PRINT(asctime(&datetime));
+
+#if defined DEBUG_CONSOLE
+      strftime(buffer, sizeof(buffer), "%a %Y/%m/%d %H:%M:%S %Z (%z)", &datetime);
+      DEBUG_PRINTF("refreshed datetime: %s\n", buffer);
+#endif
 
       struct tm end_datetime = {.tm_sec = 0, .tm_min = 0, .tm_hour = 0, .tm_mday = 1, .tm_mon = 0, .tm_year = 70, .tm_wday = 4, .tm_yday = 0, .tm_isdst = -1};
       JsonArray end_date = jevent[F("ed")];
@@ -1185,7 +1202,8 @@ bool load_events_file() {
       event.timestamp = 0;
       events.push_back(event);
 
-      // all of this is for outputting debuggin info and is not required
+#if defined DEBUG_CONSOLE
+      // all of this is for outputting debugging info and is not required
       struct tm local_now = {0};
       time_t now;
       time(&now);
@@ -1194,8 +1212,12 @@ bool load_events_file() {
       time_t t2 = mktime(&datetime);
       DEBUG_PRINT("seconds remaining: ");
       DEBUG_PRINTLN(difftime(t2, tnow));
-      DEBUG_PRINT("event put on schedule: ");
-      DEBUG_PRINTLN(asctime(&datetime));
+
+      strftime(buffer, sizeof(buffer), "%a %Y/%m/%d %H:%M:%S %Z (%z)", &datetime);
+      DEBUG_PRINTF("event put on schedule: %s\n", buffer);
+      //strftime(buffer, sizeof(buffer), "%a %Y/%m/%d %H:%M:%S %Z (%z)", &local_now);
+      //DEBUG_PRINTF("local_now: %s\n\n", buffer);
+#endif
     }
   }
   doc.clear(); // not sure if this is necessary.
@@ -2006,11 +2028,14 @@ void setup() {
 
   //if (WiFi.getMode() == WIFI_STA && WiFi.status() == WL_CONNECTED) {
   if (WiFi.status() == WL_CONNECTED) {
+    DEBUG_PRINT("POSIX timezone: ");
+    DEBUG_PRINTLN(tz.posix_tz.c_str());
     DEBUG_PRINT("Attempting to fetch time from ntp server.");
     configTzTime(tz.posix_tz.c_str(), "pool.ntp.org");
     //configTzTime(tz.posix_tz.c_str(), "192.168.1.99"); // use local ntp server that allows for testing different datetime scenarios
     struct tm local_now = {0};
     uint8_t attempt_cnt = 0;
+
     while (true) {
       time_t now;
       time(&now);
@@ -2025,7 +2050,13 @@ void setup() {
         DEBUG_PRINT(".");
       }
     }
-    DEBUG_PRINTF("\n***** local time: %d/%02d/%02d %02d:%02d:%02d *****\n", local_now.tm_year+1900, local_now.tm_mon+1, local_now.tm_mday, local_now.tm_hour, local_now.tm_min, local_now.tm_sec);
+
+#if defined DEBUG_CONSOLE
+    char buffer[100];
+    strftime(buffer, sizeof(buffer), "%a %Y/%m/%d %H:%M:%S %Z (%z)", &local_now);
+    DEBUG_PRINTF("\n***** local time: %s *****\n", buffer);
+    //DEBUG_PRINTF("\n***** local time: %d/%02d/%02d %02d:%02d:%02d tm_isdst: %d*****\n", local_now.tm_year+1900, local_now.tm_mon+1, local_now.tm_mday, local_now.tm_hour, local_now.tm_min, local_now.tm_sec, local_now.tm_isdst);
+#endif
 
     TaskHandle_t Task1;
     xTaskCreatePinnedToCore(aural_notifier, "Task1", 10000, NULL, 1, &Task1, 0);
