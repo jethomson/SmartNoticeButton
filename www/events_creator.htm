@@ -69,6 +69,7 @@
     margin: 5px auto;
   }
 
+  .load-button,
   .save-button {
     flex:1;
     padding-top:5px;
@@ -207,6 +208,9 @@
   <div id="main_div">
     <div id="button_container">
       <div id="gap1" class="gap"></div>
+      <button id="btn_load" class="load-button" onclick="(function(){document.getElementById('local_events_file').click();})()" autocomplete="off"><svg class="svg-icon" style="width:36px;height:36px" viewBox="0 -960 960 960"> <path fill="currentColor" d="M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z"/></svg>&nbsp; <span id="btn_load_text">Load From File</span> </button>
+      <input type="file" id="local_events_file" accept=".json" onchange="read_local_events(event)" autocomplete="off" style="display:none" />
+
       <button id="btn_save" class="save-button" onclick="save()"><svg class="svg-icon" style="width:36px;height:36px" viewBox="0 -960 960 960"> <path id="saveSvg" fill="currentColor" d="M440-320v-326L336-542l-56-58 200-200 200 200-56 58-104-104v326h-80ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z"/></svg> &nbsp; <span id="btn_save_text">Save</span> </button>
     </div>
     <div id="events_container" class="grid-container">
@@ -873,7 +877,28 @@ async function add_basic_event(is_new, milliseconds_from_now) {
 }
 
 
-async function load_events() {
+function read_local_events(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      events = data["events"];
+
+      load_events(events);
+    }
+    catch (err) {
+      console.error("Invalid JSON file:", err);
+      alert("Failed to parse JSON. Please check the file format.");
+    }
+  };
+  reader.readAsText(file);
+}
+
+
+async function fetch_remote_events() {
   let events;
   try {
     const response = await fetch(base_url+"/files/events.json");
@@ -885,12 +910,17 @@ async function load_events() {
     events = data["events"]
   }
   catch(e) {
-    console.error(`load_events() - ${e}`);
+    console.error(`fetch_events() - ${e}`);
   }
+  return events;
+}
 
+let en = 0;
+function load_events(events) {
+  console.log(events);
 
   if (events) {
-    for (let i = 0; i < events.length; i++) {
+    for (let i = 0; i < events.length; i++, en++) {
       add_basic_event(false);
 
       // customize events using data from events.json
@@ -899,31 +929,31 @@ async function load_events() {
       if (events[i]["d"]) {
         description = decodeURIComponent(events[i]["d"].replaceAll("+", "%20"));
       }
-      document.getElementById(`e${i}d`).value = description;
-      document.getElementById(`e${i}f`).value = events[i]["f"];
+      document.getElementById(`e${en}d`).value = description;
+      document.getElementById(`e${en}f`).value = events[i]["f"];
 
       if (events[i]["sd"]) {
         let start_date = String(events[i]["sd"][0]) + "-" + String(events[i]["sd"][1]).padStart("2", "0") + "-" + String(events[i]["sd"][2]).padStart("2", "0");
-        document.getElementById(`e${i}sd`).value = start_date;
+        document.getElementById(`e${en}sd`).value = start_date;
       }
 
       if (events[i]["st"]) {
         let start_time = String(events[i]["st"][0]).padStart("2", "0") + ":" + String(events[i]["st"][1]).padStart("2", "0") + ":" + String(events[i]["st"][2]).padStart("2", "0");
-        document.getElementById(`e${i}st`).value = start_time;
+        document.getElementById(`e${en}st`).value = start_time;
       }
 
       if (events[i]["ed"]) {
         let end_date = String(events[i]["ed"][0]) + "-" + String(events[i]["ed"][1]).padStart("2", "0") + "-" + String(events[i]["ed"][2]).padStart("2", "0");
-        document.getElementById(`e${i}ed`).value = end_date;
+        document.getElementById(`e${en}ed`).value = end_date;
       }
 
       if (events[i]["et"]) {
         let end_time = String(events[i]["et"][0]).padStart("2", "0") + ":" + String(events[i]["et"][1]).padStart("2", "0") + ":" + String(events[i]["et"][2]).padStart("2", "0");
-        document.getElementById(`e${i}et`).value = end_time;
+        document.getElementById(`e${en}et`).value = end_time;
       }
 
       if (events[i]["e"]) {
-        let exclude_select = document.getElementById(`e${i}e`);
+        let exclude_select = document.getElementById(`e${en}e`);
         let exclude = parseInt(events[i]["e"]);
         for (let j = 0; exclude > 0 && j < exclude_select.options.length; j++) {
           let option = exclude_select.options[j];
@@ -939,7 +969,7 @@ async function load_events() {
         }
       }
 
-      let pattern_select = document.getElementById(`e${i}p`);
+      let pattern_select = document.getElementById(`e${en}p`);
       for (let j = 0; j < pattern_select.options.length; j++) {
         let option = pattern_select.options[j];
         if (option.value.indexOf(events[i]["p"]) != -1) {
@@ -952,7 +982,7 @@ async function load_events() {
       if (events[i]["c"]) {
         event_color = events[i]["c"];
       }
-      let color_select = document.getElementById(`e${i}c`);
+      let color_select = document.getElementById(`e${en}c`);
       let is_color_selected = false;
       for (let j = 0; j < color_select.options.length; j++) {
         let option = color_select.options[j];
@@ -971,7 +1001,7 @@ async function load_events() {
       }
       color_select.dispatchEvent(new Event('change'));
 
-      let sound_select = document.getElementById(`e${i}s`);
+      let sound_select = document.getElementById(`e${en}s`);
       for (let j = 0; j < sound_select.options.length; j++) {
         let option = sound_select.options[j];
         if (option.value.indexOf(events[i]["s"]) != -1) {
@@ -980,7 +1010,7 @@ async function load_events() {
         }
       }
 
-      let voice_select = document.getElementById(`e${i}v`);
+      let voice_select = document.getElementById(`e${en}v`);
       for (let j = 0; j < voice_select.options.length; j++) {
         let option = voice_select.options[j];
         if (option.value.indexOf(events[i]["v"]) != -1) {
@@ -988,7 +1018,7 @@ async function load_events() {
           break;
         }
       }
-    }
+    } // end while
   }
 }
 
@@ -1079,9 +1109,11 @@ async function run() {
   add_event_buttons += '<input type="button" value="+1d" onclick="add_basic_event(true, 86400000)" />'; // what happens if a day has more than 24 hours, (i.e. fall back, DST ends)
   add_event_buttons_div.innerHTML = add_event_buttons;
   events_container.append(add_event_buttons_div);
-  load_events();
+  let events = await fetch_remote_events();
+  load_events(events);
   await get_timezone();
 }
+
 
 function quick_add_event(e) {
   if (e.ctrlKey && e.code === 'ArrowDown') {
