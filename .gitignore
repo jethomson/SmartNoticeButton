@@ -4,7 +4,11 @@
 .vscode/launch.json
 .vscode/ipch
 .vscode/extensions.json
-notes.txt
 include/credentials_private.h
+www_minified/*
+!www_minified/README.md
+dist/*
+data_real
+notes.txt
 src/*.NOTUSED
 lib/*.zip
