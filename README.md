@@ -81,6 +81,31 @@ Push button support and diffuser are printed in white PLA.
 <br>
 The base and retaining ring are printed in black PLA.
 <br>
+<br>
+The button cap was printed using the following settings in Orca Slicer:
+<br>
+&nbsp;&nbsp;Layer height: 0.12 mm
+<br>
+&nbsp;&nbsp;Quality
+<br>
+&nbsp;&nbsp;&nbsp;&nbsp;Seam position: Random
+<br>
+&nbsp;&nbsp;Strength
+<br>
+&nbsp;&nbsp;&nbsp;&nbsp;Top surface pattern: Archimedean Chords
+<br>
+&nbsp;&nbsp;&nbsp;&nbsp;Bottom surface pattern: Archimedean Chords
+<br>
+&nbsp;&nbsp;&nbsp;&nbsp;Sparse infill pattern: Archimedean Chords
+<br>
+&nbsp;&nbsp;&nbsp;&nbsp;Internal solid infill pattern: Archimedean Chords
+<br>
+&nbsp;&nbsp;Others
+<br>
+&nbsp;&nbsp;&nbsp;&nbsp;Reduce infill retraction: unchecked
+<br>
+Reduce infill retraction prevents stray bits of filament being visible in the infill since the filament is clear.
+<br>
 
 
 ### Initial Setup
@@ -100,6 +125,17 @@ The SmartButton WiFi network should no longer be visible in your list of availab
 It will appear again if the device no longer has access to your WiFi network (e.g. password changed).
 
 Now any computer or phone on your WiFi network will be able to control the device be visiting smartbutton.local.
+
+**LEDs config**
+
+LEDs number is the count of LEDs in your strip.
+
+LEDs offset is the LED index you want to treat as if it was the start of your LED strip. Since there are physical limitations on where the actual start of the strip can be, the software lets you shift the apparent location of LED 0 to make the visual patterns have a more pleasing orientation.
+
+
+**VoiceRSS API Key**
+
+[Voice RSS](https://voicerss.org/) offers a free API key for their TTS service with a limit of 350 requests per day. The sign up process is simple and only requires an email address.
 
 **Setting the timezone**
 
