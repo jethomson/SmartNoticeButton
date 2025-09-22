@@ -1,8 +1,10 @@
 ### Introduction
 An ESP32 based event scheduler that gives visual and aural notices using LEDs, mp3s saved in flash, and a free TTS service. The case is a big, 3d printed button with a clear cap to show the LEDs. 
 
-<video src="https://private-user-images.githubusercontent.com/2336438/492090742-1041dd4a-3f88-4e7f-9b9a-afa4a4d0a438.mp4?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NTg1MDU2NTEsIm5iZiI6MTc1ODUwNTM1MSwicGF0aCI6Ii8yMzM2NDM4LzQ5MjA5MDc0Mi0xMDQxZGQ0YS0zZjg4LTRlN2YtOWI5YS1hZmE0YTRkMGE0MzgubXA0P1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI1MDkyMiUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNTA5MjJUMDE0MjMxWiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9OTgwMTNhZDkyNTNkMWQ5ZmE2ZDNkMzIzYzdiZjQzOGFiMThlNTM0YmI0NDEwYjNkOWY2MDk2OGNjZjE5MmQ5NCZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QifQ.02L_q0U94pgtU3bKfRTJ7qUXldRzsy5Z3xw_y8BnHDU" width="525" height="524" controls></video>
+<video src="https://private-user-images.githubusercontent.com/2336438/492090742-1041dd4a-3f88-4e7f-9b9a-afa4a4d0a438.mp4?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NTg1MDU2NTEsIm5iZiI6MTc1ODUwNTM1MSwicGF0aCI6Ii8yMzM2NDM4LzQ5MjA5MDc0Mi0xMDQxZGQ0YS0zZjg4LTRlN2YtOWI5YS1hZmE0YTRkMGE0MzgubXA0P1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9QUtJQVZDT0RZTFNBNTNQUUs0WkElMkYyMDI1MDkyMiUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNTA5MjJUMDE0MjMxWiZYLUFtei1FeHBpcmVzPTMwMCZYLUFtei1TaWduYXR1cmU9OTgwMTNhZDkyNTNkMWQ5ZmE2ZDNkMzIzYzdiZjQzOGFiMThlNTM0YmI0NDEwYjNkOWY2MDk2OGNjZjE5MmQ5NCZYLUFtei1TaWduZWRIZWFkZXJzPWhvc3QifQ.02L_q0U94pgtU3bKfRTJ7qUXldRzsy5Z3xw_y8BnHDU" controls></video>
 
+
+<img alt="picture of the web UI for creating events" src="https://raw.githubusercontent.com/jethomson/jethomson.github.io/refs/heads/main/SmartNoticeButton_media/events_creator.png" description="Web page user interface for creating events with visual and aural notices" width="60%">
 
 ### Programming ESP32
 There are two different ways you can load the code and example files onto the ESP32.
@@ -20,6 +22,65 @@ Compile and upload the code.
 Click the ant icon on the left hand side, under Platform, click Build Filesystem Image, then click Upload Filesystem Image.
 
 ### Hardware
+[ESP32 D1 Mini - USB C - Aliexpress](https://www.aliexpress.us/item/3256805791099168.html)
+<br>
+[ESP32 D1 Mini - USB C - Amazon](https://www.amazon.com/AITRIP-ESP-WROOM-32-Bluetooth-Internet-Development/dp/B0CYC227YG)
+<br>
+[FCOB LED strip - 5 mm width - Amazon](https://www.amazon.com/dp/B0DBZPL55D)
+<br>
+[Common WS2812B LED strip - Amazon](https://www.amazon.com/SEZO-Individually-Addressable-Programmable-Non-Waterproof/dp/B097BWJGYK)
+<br>
+[Max98357 I2S 3W Class D Amplifier - Amazon](https://www.amazon.com/dp/B0B4GK5R1R)
+<br>
+Normally open momemtary push button with a tall, 6 mm plunger
+<br>
+Speaker - salvaged from an old desktop
+
+ESP32 to LED strip wiring:
+<br>
+IO16 -- Green -- DIN 
+<br>
+ GND -- White -- GND  (use the GND next to IO0)
+<br>
+ VCC --  Red  --  5V  (use VCC next to IO2)
+<br>
+
+ESP32 to Max98357 board wiring:
+<br>
+IO22 -- Orange -- LRC (wclkPin) 
+<br>
+IO21 -- Yellow -- BCLK (bclkPin) 
+<br>
+IO17 -- Green -- DIN (doutPin) 
+<br>
+ VCC --  Red --  Vin
+<br>
+ GND -- Black  -- GND
+<br>
+
+ESP32 to push button wiring:
+<br>
+IO26 -- Green -- SW_IN 
+<br>
+ GND -- Black -- SW_OUT (use the GND next to TXD)
+
+Max98357 board to speaker wiring:
+<br>
+\+ (plus) hole -- Green -- \+ (plus) pad
+<br>
+\- (minus) hole -- White -- \- (minus) pad
+<br>
+
+
+<img alt="photo of smart button disassembled" src="https://raw.githubusercontent.com/jethomson/jethomson.github.io/refs/heads/main/SmartNoticeButton_media/button_pieces.jpg" description="Photo showing components of smart button: base, circuitry, LEDS, plunger hat, diffuser, large, clear button cap, and retaining ring." width="60%">
+
+<br>
+Large button cap and plunger hat are printed in a clear PLA.
+<br>
+Push button support and diffuser are printed in white PLA.
+<br>
+The base and retaining ring are printed in black PLA.
+<br>
 
 
 ### Initial Setup
