@@ -233,7 +233,6 @@
   </div>
 
   <script>
-let timezone_API_URL = "http://worldtimeapi.org/api/timezone/";
 let base_url = "";
 if (window.location.protocol == "file:") {
   // makes for easier debugging.
@@ -790,88 +789,6 @@ const nouns = [
   "Sphinx", "Nymph", "Pegasus", "Wyvern", "Valkyrie"
 ];
 
-async function add_basic_event_OLD(is_new, milliseconds_from_now) {
-  add_basic_event.event_num = add_basic_event.event_num || 0;
-  let i = add_basic_event.event_num; 
-  let events_container = document.getElementById("events_container");
-  let event_html = event_html_template.replaceAll("!!EVENT_NUM!!", i); 
-  //events_container.insertAdjacentHTML("beforeend", event_html);
-  let add_event_buttons_div = document.getElementById("add_event_buttons_div");
-  //events_container.insertBefore(event_html, add_event_button);
-  add_event_buttons_div.insertAdjacentHTML("beforebegin", event_html);
-
-  if (is_new) {
-    let adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
-    let noun = nouns[Math.floor(Math.random() * nouns.length)];
-    document.getElementById(`e${i}d`).value = `Event ${adjective} ${noun}`;
-
-    //privacy.resistFingerprinting prevents this from working correctly
-    //const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    //console.log(timezone);
-  
-    let datetime_local;
-    try {
-      const timestamp = Date.now();
-      const response = await fetch(`${timezone_API_URL}?${timestamp}`);
-      if (!response.ok) {
-        throw new Error('Could not fetch time');
-      }
-      let data = await response.json();
-      //console.log(data);
-      datetime_local = data["datetime"]
-    }
-    catch(e) {
-      console.error(`add_basic_event() - ${e}`);
-    }
-
-    //datetime_local = "2025-11-02T01:31:08.785622-04:00"  // DST end test
-
-    datetime_local = datetime_local.replace(/\.\d+.*$/, '');
-    let sd = new Date(datetime_local + "Z")
-    sd.setSeconds(sd.getSeconds() + milliseconds_from_now/1000);
-    
-    document.getElementById(`e${i}sd`).value = sd.toISOString().split("T")[0];
-    console.log(sd.toISOString().split("T")[0]);
-    console.log(String(sd.getUTCHours()).padStart("2", "0") + ":" + String(sd.getUTCMinutes()).padStart("2", "0") + ":" + String(sd.getUTCSeconds()).padStart("2", "0"));
-    document.getElementById(`e${i}st`).value = String(sd.getUTCHours()).padStart("2", "0") + ":" + String(sd.getUTCMinutes()).padStart("2", "0") + ":" + String(sd.getUTCSeconds()).padStart("2", "0");
-    console.log(document.getElementById(`e${i}st`).value);
-    document.getElementById(`e${i}ed`).value = "";
-    document.getElementById(`e${i}et`).value = "";
-
-    let pattern_select = document.getElementById(`e${i}p`);
-    let random_pattern_option_index = Math.floor(Math.random() * pattern_select.options.length);
-    let pattern_option = pattern_select.options[random_pattern_option_index];
-    pattern_option.selected = true;
-
-    let color_select = document.getElementById(`e${i}c`);
-
-    // want to increase the odds of getting a custom random color over getting a color from the list
-    // to do that make random_color_option_index bigger than the number of options
-    // then all random_color_option_index results that are greater than the length are set to 0 which results in a custom random color
-    let random_color_option_index = Math.floor(Math.random() * 1.5 * color_select.options.length);
-    random_color_option_index = (random_color_option_index < color_select.options.length) ? random_color_option_index : 0;
-    // never randomly select black or white (too boring)
-    random_color_option_index = (random_color_option_index > 2) ? random_color_option_index : 0;
-    let color_option = color_select.options[random_color_option_index];
-    color_option.selected = true;
-    if (random_color_option_index === 0) {
-      //let random_hex_color = Math.floor(Math.random() * 16777216).toString(16); //16777216 = 16777215 + 1 = 0xFFFFFF +1, need +1 so 0xFFFFFF included in the range
-      let random_hex_color = (Math.floor(Math.random() * (16777216 - 8947848)) + 8947848).toString(16); // RGB hex numbers as strings from #888888 to #FFFFFF
-      random_hex_color = random_hex_color.toUpperCase();
-      color_select.options[0].value = `0x00${random_hex_color}`;
-      color_select.options[0].innerHTML = `Custom (#${random_hex_color})`
-    }
-    color_select.dispatchEvent(new Event('change'));
-
-    //DEBUG: for making it easier to add test events that have both sound and voice
-    let sound_select = document.getElementById(`e${i}s`);
-    sound_select.options[1].selected = true;
-  }
-
-  i++
-  add_basic_event.event_num = i; 
-}
-
 
 async function add_basic_event(is_new, value, unit) {
   add_basic_event.event_num = add_basic_event.event_num || 0;
@@ -893,9 +810,6 @@ async function add_basic_event(is_new, value, unit) {
     //console.log(timezone);
   
     let data;
-    // is cache busting necessary on POST for chrome?
-    //const timestamp = Date.now();
-    //const response = await fetch(`${timezone_API_URL}?${timestamp}`);
     try {
       const response = await fetch(base_url+"/new_time", {
         method: "POST",
@@ -1102,71 +1016,6 @@ function load_events(events) {
 }
 
 
-async function get_timezone_OLD() {
-  let iana_tz = "UTC";
-  let is_default_tz = true;
- 
-  let message = document.createElement("div");
-
-  try {
-    const response = await fetch(base_url+"/get_timezone");
-    if (!response.ok) {
-      throw new Error('Could not fetch get_timezone');
-    }
-    let data = await response.json();
-    //console.log(data);
-    iana_tz = data["iana_tz"];
-    is_default_tz = data["is_default_tz"];
-  
-    timezone_API_URL += iana_tz;
-    //timezone_API_URL += "ip"; // geolocate IP address to determine timezone
-  }
-  catch(e) {
-    console.error(`get_timezone() - ${e}`);
-  }
-
-
-  if (is_default_tz) {
-    message.innerHTML = "<b style='color:red'>Warning: timezone is not set. All times are in UTC. Please visit configuration page to set timezone.</b>";
-  }
-
-  if (iana_tz) {
-    try {
-      const timestamp = Date.now();
-      const response = await fetch(`${timezone_API_URL}?${timestamp}`);
-      if (!(response.ok || response.status == 404)) {
-        throw new Error('Could not fetch date and time info');
-      }
-
-      let data = await response.json();
-      //console.log(data);
-      if (data.hasOwnProperty("datetime") && data.hasOwnProperty("timezone")) {
-        if (message.innerHTML != "") {
-          message.innerHTML += "<br>";
-        }
-        message.innerHTML += `Local date and time at page load: ${data["datetime"].split(".")[0].replace("T", "  ")} ${data["timezone"]}`;
-      }
-      else {
-        let api_error_message = "";
-        if (data.hasOwnProperty("error")) {
-          api_error_message = data["error"];
-          api_error_message = api_error_message.charAt(0).toUpperCase() + api_error_message.slice(1);
-        }
-        message.innerHTML = `<b style='color:red'>Error: Could not get time. ${api_error_message}</b>`;
-      }
-    }
-    catch(e) {
-      console.error(`get_timezone() - ${e}`);
-    }
-
-  }
-
-  let button_container = document.getElementById("button_container");
-  let main_div = document.getElementById("main_div");
-  main_div.insertBefore(message, button_container);
-}
-
-
 async function get_timezone() {
   let iana_tz = "UTC";
   let is_default_tz = true;
@@ -1174,8 +1023,10 @@ async function get_timezone() {
   let message = document.createElement("div");
 
   try {
-    const response = await fetch(base_url+"/get_timezone");
-    if (!response.ok) {
+    // TODO cache busting necessary for Chrome?
+    const timestamp = Date.now();
+    const response = await fetch(`${base_url}/get_timezone?${timestamp}`);
+    if (!(response.ok || response.status == 404)) {
       throw new Error('Could not fetch get_timezone');
     }
     let data = await response.json();
