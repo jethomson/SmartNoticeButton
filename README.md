@@ -82,9 +82,7 @@ Push button support and diffuser are printed in white PLA.
 The base and retaining ring are printed in black PLA.
 <br>
 <br>
-The button cap was printed using the following settings in Orca Slicer:
-<br>
-&nbsp;&nbsp;Layer height: 0.12 mm
+The button cap and diffuser were printed using the following settings in Orca Slicer:
 <br>
 &nbsp;&nbsp;Quality
 <br>
@@ -106,7 +104,8 @@ The button cap was printed using the following settings in Orca Slicer:
 <br>
 Reduce infill retraction prevents stray bits of filament being visible in the infill since the filament is clear.
 <br>
-
+A layer height of 0.12 mm was used for the button and 0.2 mm was used for the diffuser.
+<br>
 
 ### Initial Setup
 The device can create its own WiFi network or it can connect to your established WiFi network.
