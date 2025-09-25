@@ -282,7 +282,7 @@ async function save() {
         value = null;
         // a completely unset date or a partially set date both result in an empty string
         if (el_key.value != "") {
-          value = el_key.value.split("-").map((s) => {return parseInt(s, 10)});
+          value = el_key.value.split("-").map((n) => {return parseInt(n, 10)});
         }
       }
 
@@ -291,7 +291,12 @@ async function save() {
         //value = [0, 0, 0];
         value = null;
         if (el_key.value != "") {
-          value = el_key.value.split(":").map((s) => {return parseInt(s, 10)});
+          value = el_key.value.split(":").map((n) => {return parseInt(n, 10)});
+          if (!('s' in value)) {
+            // html time element on mobile does not allow for setting seconds
+            // so replace with 0. backend will also fill in seconds with 0 if missing.
+            value['s'] = 0;
+          }
         }
       }
 
@@ -301,7 +306,7 @@ async function save() {
       if (key === "ed") {
         value = null;
         if (el_key.value != "") {
-          value = el_key.value.split("-").map((s) => {return parseInt(s, 10)});
+          value = el_key.value.split("-").map((n) => {return parseInt(n, 10)});
         }
       }
 
@@ -309,7 +314,10 @@ async function save() {
       if (key === "et") {
         value = null;
         if (el_key.value != "") {
-          value = el_key.value.split(":").map((s) => {return parseInt(s, 10)});
+          value = el_key.value.split(":").map((n) => {return parseInt(n, 10)});
+          if (!('s' in value)) {
+            value['s'] = 0;
+          }
         }
       }
 
@@ -828,8 +836,6 @@ async function add_basic_event(is_new, value, unit) {
       console.error(`add_basic_event() - ${e}`);
     }
 
-    console.log(data);
-
     document.getElementById(`e${i}sd`).value = data["date"];
     document.getElementById(`e${i}st`).value = data["h"].padStart("2", "0") + ":" + data["m"].padStart("2", "0") + ":" + data["s"].padStart("2", "0");
     document.getElementById(`e${i}ed`).value = "";
@@ -931,6 +937,11 @@ function load_events(events) {
       }
 
       if (events[i]["st"]) {
+        // html time element on mobile does not allow for setting seconds
+        // backend fills missing seconds with 0 but check anyway
+        if (events[i]["st"][2] === undefined) {
+          events[i]["st"][2] = 0;
+        }
         let start_time = String(events[i]["st"][0]).padStart("2", "0") + ":" + String(events[i]["st"][1]).padStart("2", "0") + ":" + String(events[i]["st"][2]).padStart("2", "0");
         document.getElementById(`e${en}st`).value = start_time;
       }
@@ -941,6 +952,9 @@ function load_events(events) {
       }
 
       if (events[i]["et"]) {
+        if (events[i]["et"][2] === undefined) {
+          events[i]["et"][2] = 0;
+        }
         let end_time = String(events[i]["et"][0]).padStart("2", "0") + ":" + String(events[i]["et"][1]).padStart("2", "0") + ":" + String(events[i]["et"][2]).padStart("2", "0");
         document.getElementById(`e${en}et`).value = end_time;
       }
@@ -1050,7 +1064,6 @@ async function get_timezone() {
       throw new Error('Could not fetch /get_time');
     }
     let data = await response.text();
-    console.log(data);
     if (data) {
       if (message.innerHTML != "") {
         message.innerHTML += "<br>";

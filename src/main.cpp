@@ -1130,6 +1130,10 @@ bool load_events_file() {
       datetime.tm_mday = start_date[2].as<uint8_t>();
       datetime.tm_hour = event_time[0].as<uint8_t>();
       datetime.tm_min = event_time[1].as<uint8_t>();
+      if (event_time.size() == 2) {
+        // html time element on mobile does not allow for setting seconds
+        datetime.tm_sec = 0;
+      }
       if (event_time.size() == 3) {
         datetime.tm_sec = event_time[2].as<uint8_t>();
       }
@@ -1178,10 +1182,17 @@ bool load_events_file() {
         end_datetime.tm_mday = end_date[2].as<uint8_t>();
       }
       JsonArray end_time = jevent[F("et")];
-      if (!end_time.isNull() && end_date.size() == 3) {
+      if (!end_time.isNull() && (end_time.size() == 2 || end_time.size() == 3)) {
         end_datetime.tm_hour = end_time[0].as<uint8_t>();
         end_datetime.tm_min = end_time[1].as<uint8_t>();
         end_datetime.tm_sec = end_time[2].as<uint8_t>();
+        if (end_time.size() == 2) {
+          // html time element on mobile does not allow for setting seconds
+          end_datetime.tm_sec = 0;
+        }
+        if (end_time.size() == 3) {
+          end_datetime.tm_sec = event_time[2].as<uint8_t>();
+        }
         end_datetime.tm_isdst = -1;
       }
 
