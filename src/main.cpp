@@ -199,6 +199,7 @@ bool create_patterns_list(void);
 bool create_special_colors_list(void);
 
 void fill_in_datetime(tm* datetime);
+tm new_time(uint32_t value, char unit);
 tm refresh_datetime(tm datetime, char frequency);
 bool is_expired(tm datetime, tm end_datetime);
 uint16_t new_id(void);
@@ -880,6 +881,7 @@ bool create_special_colors_list(void) {
 }
 
 
+
 void fill_in_datetime(tm* _datetime) {
 //#if defined DEBUG_CONSOLE
 //  char buffer[100];
@@ -895,6 +897,37 @@ void fill_in_datetime(tm* _datetime) {
 //  strftime(buffer, sizeof(buffer), "%a %Y/%m/%d %H:%M:%S %Z (%z)", _datetime);
 //  DEBUG_PRINTF("fill_in_datetime() after: %s\n", buffer);
 //#endif
+}
+
+
+tm new_time(uint32_t value, char unit) {
+  struct tm next_event = {0};
+  time_t now;
+  time(&now);
+  localtime_r(&now, &next_event);
+
+  next_event.tm_isdst = -1; // A negative value of tm_isdst causes mktime to attempt to determine if Daylight Saving Time was in effect in the specified time. 
+
+  bool updated = false;
+  switch(unit) {
+    case 's':
+      next_event.tm_sec += value;
+      break;
+    case 'm':
+      next_event.tm_min += value;
+      break;
+    case 'h':
+      next_event.tm_hour += value;
+      break;
+    case 'd':
+      next_event.tm_mday += 1;
+      break;
+    default:
+      break;
+  }
+  fill_in_datetime(&next_event);
+
+  return next_event;
 }
 
 
@@ -1008,7 +1041,7 @@ tm refresh_datetime(tm datetime, char frequency) {
 
   // if updating the event causes it to cross a daylight saving begin or end time then tm_hour will be off by 1.
   // since we just processed the event through mktime and localtime_r the event should be well formed
-  // so we can fix the off by one error by setting the hour back to the original hour pass to this function
+  // so we can fix the off by one error by setting the hour back to the original hour passed to this function
   next_event.tm_hour = datetime.tm_hour;
 
 
@@ -1090,14 +1123,16 @@ bool load_events_file() {
     JsonObject jevent = jevents[i];
     JsonArray start_date = jevent[F("sd")];
     JsonArray event_time = jevent[F("st")];
-    if (!start_date.isNull() && start_date.size() == 3 && !event_time.isNull() && event_time.size() == 3) {
+    if (!start_date.isNull() && start_date.size() == 3 && !event_time.isNull() && (event_time.size() == 2 || event_time.size() == 3)) {
       struct tm datetime = {0};
       datetime.tm_year = (start_date[0].as<uint16_t>()) - 1900; // entire year is stored in json file to make it more human readable.
       datetime.tm_mon = (start_date[1].as<uint8_t>()) - 1; // time library has January as 0, but json file represents January with 1 to make it more human readable.
       datetime.tm_mday = start_date[2].as<uint8_t>();
       datetime.tm_hour = event_time[0].as<uint8_t>();
       datetime.tm_min = event_time[1].as<uint8_t>();
-      datetime.tm_sec = event_time[2].as<uint8_t>();
+      if (event_time.size() == 3) {
+        datetime.tm_sec = event_time[2].as<uint8_t>();
+      }
       datetime.tm_isdst = -1;
 
       // refresh_datetime() uses tm_wday so it needs to be corrected before we pass datetime to refresh_datetime()
@@ -1637,6 +1672,47 @@ void web_server_initiate(void) {
       }
     }
     request->send(200);
+  });
+
+  web_server.on("/get_time", HTTP_GET, [](AsyncWebServerRequest *request) {
+    //getLocalTime() // does not return the right time, appears to subtract tz offset from UTC twice
+    struct tm local_now = {0};
+    time_t now;
+    time(&now);
+    localtime_r(&now, &local_now);
+    //char buffer[100];
+    //strftime(buffer, sizeof(buffer), "%a %Y/%m/%d %H:%M:%S %Z (%z)", &local_now);
+    char buffer[25];
+    strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S%z", &local_now); // ISO
+    request->send(200, "text/plain", buffer);
+  });
+
+  web_server.on("/new_time", HTTP_POST, [](AsyncWebServerRequest *request) {
+    uint32_t value = 0;
+    char unit = '\0';
+
+    if (request->hasParam("value", true)) {
+      AsyncWebParameter* p = request->getParam("value", true);
+      if (!p->value().isEmpty()) {
+        value = p->value().toInt();
+      }
+    }
+    if (request->hasParam("unit", true)) {
+      AsyncWebParameter* p = request->getParam("unit", true);
+      if (!p->value().isEmpty()) {
+        unit = p->value().c_str()[0];
+      }
+    }
+
+    struct tm nt = new_time(value, unit);
+    char date[11];
+    strftime(date, sizeof(date), "%Y-%m-%d", &nt);
+
+    size_t buffsize = snprintf(nullptr, 0, "{\"date\":\"%s\",\"h\":\"%d\",\"m\":\"%d\",\"s\":\"%d\"}", date, nt.tm_hour, nt.tm_min, nt.tm_sec);
+    char* new_time_json = new char[buffsize + 1]; // +1 for null string terminator
+    snprintf(new_time_json, buffsize + 1, "{\"date\":\"%s\",\"h\":\"%d\",\"m\":\"%d\",\"s\":\"%d\"}", date, nt.tm_hour, nt.tm_min, nt.tm_sec);
+    request->send(200, "application/json", new_time_json);
+    delete[] new_time_json;
   });
 
   web_server.on("/get_ip", HTTP_GET, [](AsyncWebServerRequest *request) {
