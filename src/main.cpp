@@ -1131,7 +1131,7 @@ bool load_events_file() {
       datetime.tm_hour = event_time[0].as<uint8_t>();
       datetime.tm_min = event_time[1].as<uint8_t>();
       if (event_time.size() == 2) {
-        // html time element on mobile does not allow for setting seconds
+        // html time element on mobile may not allow setting seconds
         datetime.tm_sec = 0;
       }
       if (event_time.size() == 3) {
@@ -1187,7 +1187,7 @@ bool load_events_file() {
         end_datetime.tm_min = end_time[1].as<uint8_t>();
         end_datetime.tm_sec = end_time[2].as<uint8_t>();
         if (end_time.size() == 2) {
-          // html time element on mobile does not allow for setting seconds
+          // html time element on mobile may not allow setting seconds
           end_datetime.tm_sec = 0;
         }
         if (end_time.size() == 3) {

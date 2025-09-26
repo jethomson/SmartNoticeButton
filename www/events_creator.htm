@@ -293,7 +293,7 @@ async function save() {
         if (el_key.value != "") {
           value = el_key.value.split(":").map((n) => {return parseInt(n, 10)});
           if (!('s' in value)) {
-            // html time element on mobile does not allow for setting seconds
+            // html time element on mobile may not allow setting seconds
             // so replace with 0. backend will also fill in seconds with 0 if missing.
             value['s'] = 0;
           }
@@ -729,7 +729,7 @@ async function create_event_html_template() {
     </div>
     <div class="grid-item">
       <span class="mobile-label">Start Time:</span>
-      <input id="e!!EVENT_NUM!!st" type="time" data-key="st" value="" min="" max="" />
+      <input id="e!!EVENT_NUM!!st" type="time" data-key="st" value="" min="" max="" step="1" />
     </div>
     <div class="grid-item">
       <span class="mobile-label">End Date*:</span>
@@ -737,7 +737,7 @@ async function create_event_html_template() {
     </div>
     <div class="grid-item">
       <span class="mobile-label">End Time*:</span>
-      <input id="e!!EVENT_NUM!!et" type="time" data-key="et" value="" min="" max="" />
+      <input id="e!!EVENT_NUM!!et" type="time" data-key="et" value="" min="" max="" step="1" />
     </div>
 
     <div class="grid-item" style="display: contents"> <!--wrapping exclude in a div breaks its minimize behavior unless "display: contents" is used-->
@@ -813,9 +813,15 @@ async function add_basic_event(is_new, value, unit) {
     let noun = nouns[Math.floor(Math.random() * nouns.length)];
     document.getElementById(`e${i}d`).value = `Event ${adjective} ${noun}`;
 
-    //privacy.resistFingerprinting prevents this from working correctly
+    // privacy.resistFingerprinting prevents getting the local time
+    // with javascript in firefox.
     //const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     //console.log(timezone);
+    //
+    // even when we acquire the correct local time using a web api
+    // the difficulties in getting the javascript datetime functions
+    // to work consistently in firefox and chrome led to creating an
+    // endpoint in the back end that will calculate a new time for us.
   
     let data;
     try {
@@ -937,7 +943,7 @@ function load_events(events) {
       }
 
       if (events[i]["st"]) {
-        // html time element on mobile does not allow for setting seconds
+        // html time element on mobile may not allow setting seconds
         // backend fills missing seconds with 0 but check anyway
         if (events[i]["st"][2] === undefined) {
           events[i]["st"][2] = 0;
