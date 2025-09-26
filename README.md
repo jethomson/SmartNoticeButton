@@ -34,7 +34,7 @@ Click the ant icon on the left hand side, under Platform, click Build Filesystem
 <br>
 Normally open momemtary push button with a tall, 6 mm plunger
 <br>
-Speaker - salvaged from an old desktop
+Speaker - salvaged from an old desktop (an additional print file of the base without a speaker hole is included so you can add a hole that fits your speaker)
 
 ESP32 to LED strip wiring:
 <br>
@@ -105,6 +105,9 @@ The button cap and diffuser were printed using the following settings in Orca Sl
 Reduce infill retraction prevents stray bits of filament being visible in the infill since the filament is clear.
 <br>
 A layer height of 0.12 mm was used for the button and 0.2 mm was used for the diffuser.
+<br>
+<br>
+I do not recommend printing the retaining rink with Archimedean Chords. I had trouble with a ring printed this way leaving gaps.
 <br>
 
 ### Initial Setup
