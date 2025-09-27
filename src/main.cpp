@@ -1990,6 +1990,8 @@ void DBG_create_test_data(tm local_now) {
 
 void setup() {
   DEBUG_BEGIN(115200);
+  DEBUG_PRINTLN("Debugging output started.");
+  DEBUG_FLUSH(); // wait for above message to be printed, so messages further down are not missed.
 
   // ESP32 time.h library does not support setting TZ using IANA timezones. POSIX timezones (i.e. proleptic format) are required.
   // Here is some reference info for POSIX timezones.
@@ -2090,6 +2092,11 @@ void setup() {
     DEBUG_PRINTLN("LittleFS initialisation failed!");
     while (1) yield(); // cannot proceed without filesystem
   }
+
+  DEBUG_PRINTF("LittleFS Total Bytes: %9d", LittleFS.totalBytes());
+  DEBUG_PRINTLN(" bytes");
+  DEBUG_PRINTF("LittleFS  Used Bytes: %9d", LittleFS.usedBytes());
+  DEBUG_PRINTLN(" bytes");
 
   // scanNetworks() only returns results the second time it is called, so call it here so when it is called again by the config page results will be returned
   WiFi.scanNetworks(false, true); // synchronous scan, show hidden
