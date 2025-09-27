@@ -1697,8 +1697,6 @@ void web_server_initiate(void) {
     time_t now;
     time(&now);
     localtime_r(&now, &local_now);
-    //char buffer[100];
-    //strftime(buffer, sizeof(buffer), "%a %Y/%m/%d %H:%M:%S %Z (%z)", &local_now);
     char buffer[25];
     strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S%z", &local_now); // ISO
     request->send(200, "text/plain", buffer);
