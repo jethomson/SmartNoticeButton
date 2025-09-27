@@ -183,6 +183,7 @@ void blink(uint16_t draw_interval, uint8_t num_blinks, uint8_t num_intervals_off
 uint16_t backwards(uint16_t index_in);
 void spin(uint16_t draw_interval, uint16_t(*dfp)(uint16_t));
 void twinkle(uint16_t draw_interval);
+void fill_gradient_RGB_circular(CRGB* leds, CRGB start_color, CRGB end_color);
 void fill(uint32_t color);
 void visual_reset(void);
 void visual_notifier(void);
@@ -325,14 +326,7 @@ uint16_t backwards(uint16_t index_in) {
 
 
 void spin(uint16_t draw_interval, uint16_t(*dfp)(uint16_t)) {
-  // count was an experiment to try to fix the disjoint in the animation cause by the USB hole
-  //static uint16_t count = 0;
   if (finished_waiting(draw_interval)) {
-    //if (count == NUM_LEDS) {
-    //  count = 0;
-    //  return;
-    //}
-    //count++;
     CRGB color0 = leds[(*dfp)(idx(NUM_LEDS-1))];
     for(uint16_t i = NUM_LEDS-1; i > 0; i--) {
       leds[(*dfp)(idx(i))] = leds[(*dfp)(idx(i-1))];
@@ -350,6 +344,18 @@ void twinkle(uint16_t draw_interval) {
         leds[i] = CRGB::White - leds[i];
       }
     }
+  }
+}
+
+
+void fill_gradient_RGB_circular(CRGB* leds, CRGB start_color, CRGB end_color) {
+  CRGBPalette16 palette;
+  for (uint8_t i = 0; i < 16; i++) {
+      float ratio = i / 15.0;
+      palette[i] = blend(start_color, end_color, ratio*255);
+  }
+  for (uint16_t i = 0; i < NUM_LEDS; i++) {
+    leds[idx(i)] = ColorFromPalette(palette, (i*255)/NUM_LEDS);
   }
 }
 
@@ -404,11 +410,11 @@ void fill(uint32_t color) {
     color = color & 0x00FFFFFF;
     CRGB color_dim = color;
     color_dim.nscale8(20); // lower numbers are closer to black
-    fill_gradient_RGB(leds, idx(0), color, idx(NUM_LEDS-1), color_dim);
+    fill_gradient_RGB_circular(leds, color, color_dim);
   }
   else {
     // black and pink is used to indicate something went wrong during testing
-    fill_gradient_RGB(leds, idx(0), CRGB::Black, idx(NUM_LEDS-1), CRGB::Pink);
+    fill_gradient_RGB_circular(leds, CRGB::Black, CRGB::Pink);
   }
 }
 
