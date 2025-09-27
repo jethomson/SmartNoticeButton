@@ -151,3 +151,9 @@ Delete the information in the IANA Timezone field, and click outside of that fie
 With luck your IANA Timezone will be filled in automatically based on the location of your IP address, then a few moments later the POSIX Timezone (has Daylight Saving Time info) will also automatically be filled in. If this information is not correct you can manually set the IANA Timezone, then the POSIX Timezone will automatically update.
 Click Save and wait for the device to restart.
 Now you should be able to add the time and date to your composites.
+
+### Sound Files and Licences
+
+[chime01.mp3 :: what-friends-are-for-507.mp3](https://notificationsounds.com/wake-up-tones/what-friends-are-for-507)&nbsp;&nbsp;&nbsp;&nbsp;[Creative Commons Attribution license](https://creativecommons.org/licenses/by/4.0/legalcode)<br>
+[chime02.mp3 :: simple-notification-1520254.mp3 by Universfield](https://pixabay.com/sound-effects/simple-notification-152054/)&nbsp;&nbsp;&nbsp;&nbsp;[Pixabay license](https://pixabay.com/service/license-summary/)<br>
+[chime03.mp3 :: Tannoy chime 01.mp3 by kwahmah_02](https://freesound.org/people/kwahmah_02/sounds/245954/)&nbsp;&nbsp;&nbsp;&nbsp;[Creative Commons Attribution license](https://creativecommons.org/licenses/by/3.0/)<br>
