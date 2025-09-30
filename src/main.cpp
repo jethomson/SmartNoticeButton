@@ -576,6 +576,7 @@ void visual_notifier(void) {
 //AudioOutputI2S *audio_out = new AudioOutputI2S();
 AudioOutputI2S *audio_out = new AudioOutputI2S(0, 0, 32, 0); // increase DMA buffer. does this help with beginning of sound being cutoff?
 AudioGeneratorMP3 *mp3 = new AudioGeneratorMP3();
+bool mp3_stop_requested = false;
 void play(AudioFileSource* file) {
   AudioFileSourceBuffer *buff;
   buff = new AudioFileSourceBuffer(file, 2048);
@@ -602,6 +603,7 @@ void play(AudioFileSource* file) {
   mp3->begin(buff, audio_out);
 
   static int lastms = 0;
+  mp3_stop_requested = false;
   while (true) {
     if (mp3 && mp3->isRunning()) {
       if (millis()-lastms > 1000) {
@@ -610,7 +612,7 @@ void play(AudioFileSource* file) {
         DEBUG_FLUSH();
         vTaskDelay(pdMS_TO_TICKS(5));
       }
-      if (!mp3->loop()) {
+      if (!mp3->loop() || mp3_stop_requested) {
         mp3->stop();
         DEBUG_PRINTLN("Finished playing.");
         DEBUG_FLUSH();
@@ -1346,6 +1348,10 @@ void check_for_recent_events(uint16_t interval) {
 
 void single_click_handler(Button2& b) {
   DEBUG_PRINTLN("single_click");
+  if (mp3 && mp3->isRunning()) {
+    mp3_stop_requested = true;
+    DEBUG_PRINTLN("Stopped playing mp3 early.");
+  }
   if (!is_audio_message_queued) {
     for (uint16_t i = 0; i < events.size(); i++) {
       if (events[i].timestamp > 0) {
