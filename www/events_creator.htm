@@ -233,6 +233,9 @@
   </div>
 
   <script>
+// minifier code breaks code when some escape sequences (e.g. backslash n) are used
+const newline_char = String.fromCharCode(10);
+const return_char = String.fromCharCode(13);
 let base_url = "";
 if (window.location.protocol == "file:") {
   // makes for easier debugging.
@@ -400,7 +403,7 @@ async function save() {
       headers: {
         "Content-Type": "application/x-www-form-urlencoded"
       },
-      body: "id=/files/events.json&json=" + json
+      body: "id=/files/usr/events.json&json=" + json
     });
     if (!response.ok) {
       throw new Error('Could not save events.json');
@@ -487,17 +490,44 @@ async function create_color_options() {
 
 
 async function create_sound_options() {
-  let sound_options_html = `
-    <option value="">No sound</option>
-  <optgroup id="s" label="Sounds">
-    <option value="chime01.mp3">Chime 01</option>
-    <option value="chime02.mp3">Chime 02</option>
-    <option value="chime03.mp3">Chime 03</option>
-  </optgroup>`;
+  let sound_options_html = '';
+  let files;
+  try {
+    const response = await fetch(base_url+"/files/file_list.json");
+    if (!response.ok) {
+      throw new Error('Could not fetch file_list.json');
+    }
 
+    files = await response.json();
+
+    if (Object.keys(files).length === 0 && files.constructor === Object) {
+      throw new Error("Error file list is empty.");
+    }
+  }
+  catch(e) {
+    console.error(`create_sound_options() - ${e}`);
+  }
+
+  if (files) {
+    const FILE_ROOT = Object.keys(files)[0];
+    const dir = 'snd';
+    if (files[FILE_ROOT][dir]) {
+      sound_options_html += `
+  <optgroup id="s" label="Sounds">`;
+      files[FILE_ROOT][dir].forEach(filename => {
+        // save space by not saving entire path in events.json
+        //let path = FILE_ROOT + "/" + dir + "/" + filename;
+        sound_options_html += `
+     <option value="${filename}">${filename.replace(/\.mp3$/i, '')}</option>`;
+      });
+      sound_options_html += `
+     <option value="?????">?????</option>
+  </optgroup>`;
+    }
+  }
 
   try {
-    const response = await fetch(base_url+"/files/sound_URLs.json");
+    const response = await fetch(base_url+"/files/usr/sound_URLs.json");
     if (!response.ok) {
       throw new Error('Could not fetch sound_URLs.json');
     }
@@ -505,11 +535,11 @@ async function create_sound_options() {
     options = data["sounds"]
     if (options) {
       sound_options_html += `
-  <optgroup id="s" label="URLs">`;
+  <optgroup id="u" label="URLs">`;
       for (let i = 0; i < options.length; i++) {
         let option = options[i];
         sound_options_html += `
-     <option value="${option['u']}">${option['d']}</option>`;
+     <option value="${option['u']}">${option['d'].replace(/\.mp3$/i, '')}</option>`;
       }
       sound_options_html += `
   </optgroup>`;
@@ -875,7 +905,7 @@ async function add_basic_event(is_new, value, unit) {
 
     //DEBUG: for making it easier to add test events that have both sound and voice
     let sound_select = document.getElementById(`e${i}s`);
-    sound_select.options[1].selected = true;
+    sound_select.options[0].selected = true;
   }
 
   i++
@@ -907,7 +937,7 @@ function read_local_events(event) {
 async function fetch_remote_events() {
   let events;
   try {
-    const response = await fetch(base_url+"/files/events.json");
+    const response = await fetch(base_url+"/files/usr/events.json");
     if (!response.ok) {
       throw new Error('Could not fetch events.json');
     }

@@ -44,6 +44,13 @@
 
 #include <vector>
 
+// storage locations for animated matrices and playlists.
+// note the pathes are hardcoded in the HTML files, so changing these defines is not enough.
+// do not put a / at the end
+#define FILE_ROOT "/files"
+#define SND_ROOT FILE_ROOT "/snd"
+#define USR_ROOT FILE_ROOT "/usr"
+
 #define WIFI_CONNECT_TIMEOUT 10000 // milliseconds
 #define SOFT_AP_SSID "SmartButton"
 #define MDNS_HOSTNAME "smartbutton"
@@ -61,6 +68,9 @@
 #define DESCRIPTION_SIZE 301 // frontend allows up to 100 but with percent encoding the description could become much longer.
 #define SOUND_SIZE 101
 #define VOICE_SIZE 15 // longest voice string for voicerss: fr-ca&v=Olivia
+
+#define RANDOM_SOUND_MARKER "?????"
+#define HTTP_SOUND_PREFIX "http://"
 
 #define SENTINEL_EVENT_ID -1 // event.id is always non-negative, so -1 indicates never seen
 
@@ -131,6 +141,7 @@ struct Event {
   uint8_t pattern;
   uint32_t color;
   char sound[SOUND_SIZE];
+  bool is_random_sound;
   char voice[VOICE_SIZE];
   time_t timestamp;
 };
@@ -169,6 +180,9 @@ std::vector<uint8_t> special_colors;
 
 uint8_t num_special_colors = 0;
 
+const char* stored_file_list = FILE_ROOT "/file_list.json";
+//const char* sound_URLs = FILE_USR "/sound_URLs.json";
+
 String patterns_json;
 String special_colors_json;
 
@@ -204,6 +218,7 @@ tm new_time(uint32_t value, char unit);
 tm refresh_datetime(tm datetime, char frequency);
 bool is_expired(tm datetime, tm end_datetime);
 uint16_t new_id(void);
+void set_random_sound(char* sound, size_t sound_len);
 bool load_events_file(void);
 bool save_file(String fs_path, String json, String& message);
 void check_for_recent_events(uint16_t interval);
@@ -225,6 +240,7 @@ void web_server_station_setup(void);
 void web_server_ap_setup(void);
 void web_server_initiate(void);
 time_t time_provider();
+
 
 
 // If two functions running close to each other both call is_wait_over()
@@ -580,26 +596,6 @@ bool mp3_stop_requested = false;
 void play(AudioFileSource* file) {
   AudioFileSourceBuffer *buff;
   buff = new AudioFileSourceBuffer(file, 2048);
-  //buff->RegisterStatusCB(StatusCallback, (void*)"buffer");
-  //mp3->RegisterStatusCB(StatusCallback, (void*)"mp3");
-
-  // this was an attempt to read the first few bytes of the file and using them to determine if it is an mp3
-  // however this results in a bit of the beginning of the file not being played
-  // seeking backwards to prevent the pop does not work at all for HTML stream and has odd results for files
-  // have also found valid mp3 files that do not start with these magic numbers.
-  //const uint32_t magic_numbers_len = 3;
-  //uint8_t magic_numbers[magic_numbers_len];
-  //buff->read(magic_numbers, magic_numbers_len);
-  //buff->seek(-3, SEEK_CUR);
-  // limited observation of making bad requests shows ESP8266Audio thinks the file size of a bad request is very large.
-  // only looked at bad requests to voicerss.org
-  // if the validity of the mp3 is not checked ESP8266Audio can get stuck in loop() causing a watchdog timer reboot.
-  //if (file->getSize() > 100000 || !((magic_numbers[0] == 0x49 && magic_numbers[1] == 0x44 && magic_numbers[2] == 0x33) || (magic_numbers[0] == 0xFF && magic_numbers[1] == 0xFB)) ) {
-  //if (file->getSize() > 100000) {
-  //  DEBUG_PRINTLN("Invalid MP3.");
-  //  return;
-  //}
-
   mp3->begin(buff, audio_out);
 
   static int lastms = 0;
@@ -660,11 +656,15 @@ bool is_valid_mp3_URL(const char* url) {
 }
 
 
-AudioFileSourceHTTPStream *http_mp3_file = new AudioFileSourceHTTPStream();
 void http_sound(const char* url) {
   DEBUG_PRINT("http_sound(): ");
   DEBUG_PRINTLN(url);
   if (is_valid_mp3_URL(url)) {
+    // I am not sure if it is better for memory usage (and fragmentation) to only create this
+    // one time or to recreate it for every function call.
+    // Recreating this every time prevents a bug where the http mp3 fails to play if the
+    // previous play was stopped early.
+    AudioFileSourceHTTPStream *http_mp3_file = new AudioFileSourceHTTPStream();
     http_mp3_file->open(url);
     play(http_mp3_file);
     http_mp3_file->close();
@@ -723,9 +723,10 @@ void tell(const char* description, const char* voice, time_t timestamp, bool do_
 
 
 void file_sound(const char* filename) {
-  size_t buffsize = snprintf(nullptr, 0, "/files/%s", filename);
+  size_t buffsize = snprintf(nullptr, 0, SND_ROOT "/%s", filename);
   char* filepath = new char[buffsize + 1];
-  snprintf(filepath, buffsize + 1, "/files/%s", filename);
+  snprintf(filepath, buffsize + 1, SND_ROOT "/%s", filename);
+
   AudioFileSourceSPIFFS *sound_file = new AudioFileSourceSPIFFS();
   sound_file->open(filepath);
   delete[] filepath;
@@ -742,8 +743,9 @@ void aural_notifier(void* parameter) {
     if (xQueueReceive(qaudio_messages, (void *)&am, 0) == pdTRUE) {
       is_audio_message_queued = true;
       if (strlen(am.sound) > 0) {
-        const char* http_sound_prefix = "http://";
-        if (strncmp(am.sound, http_sound_prefix, strlen(http_sound_prefix)*sizeof(char)) == 0) {
+        //const char* http_sound_prefix = "http://";
+        //if (strncmp(am.sound, http_sound_prefix, strlen(http_sound_prefix)*sizeof(char)) == 0) {
+        if (strncmp(am.sound, HTTP_SOUND_PREFIX, strlen(HTTP_SOUND_PREFIX)*sizeof(char)) == 0) {
           http_sound(am.sound);
         }
         else {
@@ -1097,12 +1099,44 @@ uint16_t new_id(bool reset) {
 }
 
 
+void set_random_sound(char* sound, size_t sound_len) {
+  if (sound == NULL || sound_len == 0) return;
+
+  File file = LittleFS.open(stored_file_list, "r");
+
+  if (!file && !file.available()) {
+    return;
+  }
+
+  DynamicJsonDocument doc(24576);
+  ReadBufferingStream bufferedFile(file, 64);
+  DeserializationError error = deserializeJson(doc, bufferedFile);
+  file.close();
+
+  if (error) {
+    DEBUG_PRINT("deserializeJson() failed: ");
+    DEBUG_PRINTLN(error.c_str());
+    restart_needed = true;
+    return;
+  }
+
+  JsonObject object = doc.as<JsonObject>();
+  JsonArray jsnd = doc[F("/files")][F("snd")].as<JsonArray>();
+
+  if (jsnd.isNull() || jsnd.size() == 0) {
+    return;
+  }
+  uint32_t index = random(jsnd.size());
+  snprintf(sound, sound_len, "%s", jsnd[index].as<const char*>());
+}
+
+
 bool load_events_file() {
   events.clear(); // does it make sense to clear even if the json file is unavailable or invalid?
   (void)new_id(true); // reset
   last_id_seen = SENTINEL_EVENT_ID;
 
-  File file = LittleFS.open("/files/events.json", "r");
+  File file = LittleFS.open(USR_ROOT "/events.json", "r");
   
   if (!file && !file.available()) {
     return true;
@@ -1165,7 +1199,7 @@ bool load_events_file() {
         description = jevent[F("d")];
       }
       // this is the description from the frontend. if it is too long it will be shortened when stored in event.description
-      DEBUG_PRINT("description: ");
+      DEBUG_PRINT("\ndescription: ");
       DEBUG_PRINTLN(description);
 
 
@@ -1234,6 +1268,20 @@ bool load_events_file() {
         sound = jevent[F("s")];
       }
 
+      //for random sounds we wish the sound to be randomized every time the event occurrs, but
+      //also want the same sound to be replayed by single_click_handler()
+      //therefore when sound is "?????" we do not replace it directly with a random sound because
+      //the same random sound would be reused every time the event occurred.
+      //
+      //events json file does not actually have a field that directly correlates to is_random_sound
+      //when the file is loaded by this function, sound is used to set is_random_sound
+      //then when the event occurs is_random_sound is used to indicate that event.sound would be
+      //replaced with a random sound.
+      boolean is_random_sound = false;
+      if (strncmp(sound, RANDOM_SOUND_MARKER, strlen(RANDOM_SOUND_MARKER)*sizeof(char)) == 0) {
+        is_random_sound = true;
+      }
+
       const char* voice = "";
       if (!jevent[F("v")].isNull()) {
         voice = jevent[F("v")];
@@ -1251,6 +1299,7 @@ bool load_events_file() {
       event.exclude = exclude;
       event.pattern = pattern;
       event.color = color;
+      event.is_random_sound = is_random_sound;
       snprintf(event.sound, sizeof(event.sound), "%s", sound);
       snprintf(event.voice, sizeof(event.voice), "%s", voice);
       event.timestamp = 0;
@@ -1332,7 +1381,14 @@ void check_for_recent_events(uint16_t interval) {
           events[i].timestamp = tevent;
           struct AudioMessage audio_message = {events[i].id, "", "", "", events[i].timestamp, false};
           snprintf(audio_message.description, sizeof(audio_message.description), "%s", events[i].description);
+
+          if (events[i].is_random_sound) {
+            // events[i].sound is overwritten because want single_click_handler()
+            // to be able to replay the same random song
+            set_random_sound(events[i].sound, sizeof(events[i].sound));
+          }
           snprintf(audio_message.sound, sizeof(audio_message.sound), "%s", events[i].sound);
+
           snprintf(audio_message.voice, sizeof(audio_message.voice), "%s", events[i].voice);
           xQueueSend(qaudio_messages, (void *)&audio_message, 0);
         }
@@ -1343,7 +1399,6 @@ void check_for_recent_events(uint16_t interval) {
     }
   }
 }
-
 
 
 void single_click_handler(Button2& b) {
@@ -1606,11 +1661,11 @@ void web_server_station_setup(void) {
 
     if (id != "") {
       String fs_path = id;
-      if (id == "/files/events.json" && save_file(fs_path, json, message)) {
+      if (id == USR_ROOT "/events.json" && save_file(fs_path, json, message)) {
         events_reload_needed = true;
         rc = 200;
       }
-      if (id == "/files/sound_URLs.json" && save_file(fs_path, json, message)) {
+      if (id == USR_ROOT "/sound_URLs.json" && save_file(fs_path, json, message)) {
         rc = 200;
       }
     }
@@ -1972,7 +2027,7 @@ void DBG_create_test_data(tm local_now) {
   uint32_t color = 0x00FF0000; // solid red
   char sound[SOUND_SIZE] = ""; // no sound
   char voice[VOICE_SIZE] = "en-ca&v=Clara";
-  struct Event event1 = {new_id(false), refresh_datetime(datetime, frequency), frequency, {0}, "", exclude, pattern, color, "", "", 0};
+  struct Event event1 = {new_id(false), refresh_datetime(datetime, frequency), frequency, {0}, "", exclude, pattern, color, "", false, "", 0};
   event1.end_datetime = {.tm_sec = 0, .tm_min = 0, .tm_hour = 0, .tm_mday = 1, .tm_mon = 0, .tm_year = 70, .tm_wday = 4, .tm_yday = 0, .tm_isdst = -1};
   snprintf(event1.description, sizeof(event1.description), "%s", description);
   snprintf(event1.sound, sizeof(event1.sound), "%s", sound);
@@ -1986,7 +2041,7 @@ void DBG_create_test_data(tm local_now) {
   color = 0x01000000;
   char sound2[SOUND_SIZE] = "chime01.mp3";
   char voice2[VOICE_SIZE] = "en-ca&v=Clara";
-  struct Event event2 = {new_id(false), refresh_datetime(datetime, frequency), frequency, {0}, "", exclude, pattern, color, "", "", 0};
+  struct Event event2 = {new_id(false), refresh_datetime(datetime, frequency), frequency, {0}, "", exclude, pattern, color, "", false, "", 0};
   event2.end_datetime = {.tm_sec = 0, .tm_min = 0, .tm_hour = 0, .tm_mday = 1, .tm_mon = 0, .tm_year = 70, .tm_wday = 4, .tm_yday = 0, .tm_isdst = -1};
   snprintf(event2.description, sizeof(event2.description), "%s", description2);
   snprintf(event2.sound, sizeof(event2.sound), "%s", sound2);
