@@ -35,6 +35,8 @@ Click the ant icon on the left hand side, under Platform, click Build Filesystem
 Normally open momemtary push button with a tall, 6 mm plunger
 <br>
 Speaker - salvaged from an old desktop (an additional print file of the base without a speaker hole is included so you can add a hole that fits your speaker)
+<br>
+Three sticky rubber feet for the bottom (not required, but the sound will escape better)
 
 ESP32 to LED strip wiring:
 <br>
