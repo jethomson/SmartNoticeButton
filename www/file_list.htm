@@ -84,23 +84,161 @@
   <h3 style="margin-bottom: 0">File List</h3>
   <h5 style="margin-top: 0">You can backup your events by downloading a copy of events.json from this page. This copy can be restored using the Load From File button on the Create Events page.</h5>
   <div id="container" class="grid-container">
-    <div id="checkbox_div">
-      <div class="grid-checkbox-row">
-        <a>/files/</a>
-      </div>
-      <div class="grid-checkbox-row">
-        <a class="span-regular-file" href="/files/chime01.json">/files/chime01.json</a>
-      </div>
-      <div class="grid-checkbox-row">
-        <a class="span-regular-file" href="/files/chime02.json">/files/chime02.json</a>
-      </div>
-      <div class="grid-checkbox-row">
-        <a class="span-regular-file" href="/files/events.json">/files/events.json</a>
-      </div>
-      <div class="grid-checkbox-row">
-        <a class="span-regular-file" href="/files/sound_URLs.json">/files/sound_URLs.json</a>
-      </div>
+    <div id="entry_div">
     </div>
   </div>
+ 
+  
+  <script>
+  // minifier code breaks code when some escape sequences (e.g. backslash n) are used
+  const newline_char = String.fromCharCode(10);
+  const return_char = String.fromCharCode(13);
+  //const tab_char = String.fromCharCode(9)
+
+  base_url = "";
+  if (window.location.protocol == "file:") {
+    // makes for easier debugging.
+    // if html is loaded locally, can see the results of editing more easily.
+    // otherwise every change to html would require uploading new version to microcontroller.
+    base_url = "http://smartbutton.local";
+  }
+
+  /*
+  async function post_data() {
+    const marked_files = document.querySelectorAll('input[type="checkbox"]:checked');
+    
+    let delete_files = {};
+    for (mf of marked_files) {
+      const type = mf.getAttribute("data-type");
+      const id = mf.getAttribute("data-id");
+      if (!Array.isArray(delete_files[type])) {
+        delete_files[type] = []; 
+      }
+      if (delete_files[type][0] != "") {
+        // [""] means delete everything in directory so no point in adding individual files to list
+        delete_files[type].push(id);
+      }
+    }
+
+    console.log(JSON.stringify(delete_files));
+    const response = await fetch(base_url+"/delete", {method: "POST", body: JSON.stringify(delete_files)});
+  }
+  */
+
+
+  let url_string = "";
+  function create_entry(root, dir, filename) {
+    let path = root + "/" + dir + "/" + filename;
+    
+    let name = dir;
+    if (filename != "") {
+      name += "/"+filename;
+    }
+
+    let row = document.createElement("div");
+    row.classList.add("grid-checkbox-row");
+
+    //let checkbox_input = document.createElement("input");
+    //checkbox_input.setAttribute("type", "checkbox");
+    //checkbox_input.setAttribute("id", path);
+    //checkbox_input.setAttribute("name", name);
+    //checkbox_input.setAttribute("data-type", type);
+    //checkbox_input.setAttribute("data-id", id);
+    //checkbox_input.setAttribute("data-size", size);
+    //checkbox_input.setAttribute("form", "delete_form");
+  
+    //row.appendChild(checkbox_input);
+
+    let label_anchor = document.createElement("a");
+  
+    let label_text = path;
+    if (!path.endsWith("/")) {
+      label_anchor.classList.add("span-regular-file");
+      label_href = base_url+encodeURIComponent(label_text).replaceAll("%2F", "/");
+      label_anchor.href = label_href;
+
+      if (!base_url) {
+        url_string += `http://${location.hostname}`;
+      }
+      url_string += `${label_href} `;
+    }
+    label_anchor.appendChild(document.createTextNode(label_text));
+    
+    //if (path.endsWith("/")) {
+    //  //label_anchor.style.whiteSpace = "pre";
+    //  const span = document.createElement('span');
+    //  span.style.whiteSpace = "pre";
+    //  span.textContent = '    (delete all files in folder, but keep folder)';
+    //  span.style.color = 'gray';
+    //  span.style.fontStyle = 'italic';
+    //  label_anchor.appendChild(span);
+    //}
+
+    row.appendChild(label_anchor);
+    return row;
+  }
+
+
+  function insert_file_list(files) {
+    let container = document.getElementById("container");
+    let form = document.getElementById("delete_form");
+
+    let entry_div = document.getElementById("entry_div");
+
+    let num_files_added = 0;
+    if (files) {
+      const FILE_ROOT = Object.keys(files)[0];
+      Object.keys(files[FILE_ROOT]).forEach(dir => {
+        let entry_row = create_entry(FILE_ROOT, dir, "");
+        entry_div.appendChild(entry_row);
+        files[FILE_ROOT][dir].forEach(filename => {
+          let entry_row = create_entry(FILE_ROOT, dir, filename);
+          entry_div.appendChild(entry_row);
+          num_files_added++;
+        });        
+      });
+
+      // alternate method of backing up data by downloading each json file individually
+      if (url_string) {
+        console.log("wget --force-directories --wait=2 --limit-rate=20k "+url_string);
+      }
+    }
+    
+    if (num_files_added === 0) {
+      let not_found_div = document.createElement("div");
+      not_found_div.innerText = "No files found.";
+      not_found_div.style = "color: white; text-align: center; width: 100%;";
+      container.insertBefore(not_found_div, entry_div);
+    }
+    container.style.visibility = "visible";
+  }
+  
+  
+  async function run() {
+    let files;
+    try {
+      let response = await fetch(`${base_url}/files/file_list.json`);
+      if (!response.ok) {
+        throw new Error("Error fetching /files/file_list.json");
+      }
+
+      files = await response.json();
+
+      if (Object.keys(files).length === 0 && files.constructor === Object) {
+        throw new Error("Error file list is empty.");
+      }
+    }
+    catch(e) {
+      console.error(e);
+      files = null; // files = {}; if (files) is true so use null
+      // this is not a fatal error. device can still operate normally without any files.
+    }
+
+    insert_file_list(files);
+  }
+
+  window.addEventListener("load", run);
+
+  </script>
 </body>
 </html>

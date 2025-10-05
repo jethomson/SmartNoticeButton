@@ -220,10 +220,10 @@ async function save() {
       headers: {
         "Content-Type": "application/x-www-form-urlencoded"
       },
-      body: "id=/files/sound_URLs.json&json=" + json
+      body: "id=/files/usr/sound_URLs.json&json=" + json
     });
     if (!response.ok) {
-      throw new Error('Error saving /files/sound_URLs.json');
+      throw new Error('Error saving /files/usr/sound_URLs.json');
     }
     success = true;
   }
@@ -296,7 +296,7 @@ async function add_sound_fields() {
 async function load_sounds() {
 
   let sounds;
-  await fetch(base_url+"/files/sound_URLs.json").then((response) => {
+  await fetch(base_url+"/files/usr/sound_URLs.json").then((response) => {
     if (response.ok) {
       return response.json();
     }

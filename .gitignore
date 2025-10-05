@@ -9,6 +9,7 @@ www_minified/*
 !www_minified/README.md
 dist/*
 data_real
+data/files/file_list.json
 notes.txt
 src/*.NOTUSED
 lib/*.zip
