@@ -1,11 +1,15 @@
+from pathlib import Path
 import shutil
-import os.path
-from os import path
+import os
 
 Import('env')
 
 
 def dist(source, target, env):
+  DEST_DIR = 'dist'
+  dest = Path(DEST_DIR)
+  os.makedirs(dest, exist_ok=True)
+  
   build_dir = env.subst('$BUILD_DIR')
 
   bootloader = f'{build_dir}/bootloader.bin'
@@ -15,33 +19,33 @@ def dist(source, target, env):
   littlefs = f'{build_dir}/littlefs.bin'
 
 
-  if path.exists(bootloader):
-    shutil.copy(bootloader, './dist/')
+  if os.path.exists(bootloader):
+    shutil.copy(bootloader, dest)
   else:
     print(f'{bootloader} not found.')
     
-  if path.exists(partitions):
-    shutil.copy(partitions, './dist/')
+  if os.path.exists(partitions):
+    shutil.copy(partitions, dest)
   else:
     print(f'{partitions} not found.')
 
-  if path.exists(boot_app0):
-    shutil.copy(boot_app0, './dist/')
+  if os.path.exists(boot_app0):
+    shutil.copy(boot_app0, dest)
   else:
     print(f'{boot_app0} not found.')
 
-  if path.exists(firmware):
-    shutil.copy(firmware, './dist/')
+  if os.path.exists(firmware):
+    shutil.copy(firmware, dest)
   else:
     print(f'{firmware} not found.')
     
-  if path.exists(littlefs):
-    shutil.copy(littlefs, './dist/')
+  if os.path.exists(littlefs):
+    shutil.copy(littlefs, dest)
   else:
     print(f'{littlefs} not found.')
 
 
-  with open('./dist/README.TXT', 'w') as fr:
+  with open(Path(dest, 'README.TXT'), 'w') as fr:
     print("""Standalone executables of esptool can be downloaded from https://github.com/espressif/esptool/releases
 
 Versions of esptool for Linux, Mac, and Windows are already included in the esptool folder
@@ -126,20 +130,20 @@ Have fun converting images to pixel art, adding effects, and making playlists!
   mac_upload_cmd += r'./esptool/mac/esptool --no-stub' + upload_cmd  
   win_upload_cmd = r'.\esptool\win\esptool.exe --no-stub' + upload_cmd
 
-  with open('./dist/upload_linux.sh', 'w') as fl:
+  with open(Path(dest, 'upload_linux.sh'), 'w') as fl:
     print(linux_upload_cmd, file=fl, end='')
-  with open('./dist/upload_mac.sh', 'w') as fm:
+  with open(Path(dest, 'upload_mac.sh'), 'w') as fm:
     print(mac_upload_cmd, file=fm, end='')
-  with open('./dist/upload_win.bat', 'w') as fw:
+  with open(Path(dest, 'upload_win.bat'), 'w') as fw:
     print(win_upload_cmd, file=fw, end='')
 
 
-  os.chdir('./dist')
+  os.chdir(dest)
   env.Execute(merge_cmd)
   #merge_cmd_no_fs = '"$PYTHONEXE" "$OBJCOPY" --chip esp32 merge_bin -o merged_firmware_no_fs.bin --flash_mode dio --flash_freq 40m --flash_size 4MB 0x1000 bootloader.bin 0x8000 partitions.bin 0xe000 boot_app0.bin 0x10000 firmware.bin'
   #env.Execute(merge_cmd_no_fs)
 
-  if path.exists(merged_firmware):
+  if os.path.exists(merged_firmware):
     shutil.copy(merged_firmware, '../webflash/')
   else:
     print(f'{merged_firmware} not found.')
