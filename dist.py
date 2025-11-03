@@ -72,14 +72,13 @@ After about 30 seconds, it will output a message and then exit.
 
 The device should restart automatically.
 
-The device will create a WiFi access point with the SSID: PixelArt.
-Connect to PixelArt.
+The device will create a WiFi access point with the SSID: SmartButton.
+Connect to SmartButton.
 Enter the SSID and password for your WiFi router.
-Chose a hostname for multicast DNS (e.g. pixelart).
-Enter the number of rows and columns for your LED matrix.
+Chose a hostname for multicast DNS (e.g. smartbutton).
 Click Save.
 The device should restart and connect to your wireless network.
-In your web browser go to the mDNS address you set (e.g. http://pixelart.local).
+In your web browser go to the mDNS address you set (e.g. http://smartbutton.local).
 Have fun converting images to pixel art, adding effects, and making playlists!
 """, file=fr)
 
